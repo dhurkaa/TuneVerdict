@@ -1,0 +1,101 @@
+/*
+ * Design tokens.
+ *
+ * Instrument-grade, not racing. The industry works dark because curves read
+ * better and the work happens on a laptop in a workshop — but this is a measuring
+ * instrument, so: no gradients, no glows, no aggressive reds as decoration. Red
+ * means a risk finding and nothing else, which is what makes it worth noticing.
+ *
+ * Every colour is a dark/light pair of the same name. Dark is the application
+ * default; light exists because dark screenshots print as a smudge in an A4 thesis.
+ */
+
+:root {
+  /* Dark — the default. */
+  --base: #0d1012;
+  --panel: #14181b;
+  --inset: #1a1f23;
+  --line: #232a2f;
+  --text: #ecf1f3;
+  --muted: #93a0a8;
+  --signal: #5cc8ac;
+  --ok: #5cc8ac;
+  --caution: #e8b04b;
+  --risk: #e2574c;
+  --reference: #7e8c94;
+
+  --on-signal: #06211b;
+  --primary-bg: var(--signal);
+  --primary-text: var(--on-signal);
+
+  /* Tints, for chart bands and row highlights. Kept as rgba of the same hues so
+     there is exactly one definition of each colour. */
+  --signal-tint: rgba(92, 200, 172, 0.16);
+  --caution-tint: rgba(232, 176, 75, 0.14);
+  --risk-tint: rgba(226, 87, 76, 0.14);
+  --reference-tint: rgba(126, 140, 148, 0.16);
+
+  /* Typography. IBM Plex Mono for every number, always: monospace figures align
+     down a column, which for a measuring tool is legibility, not taste. */
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --size-headline: 76px;
+  --size-figure: 34px;
+  --size-title: 17px;
+  --size-body: 13px;
+  --size-label: 11px;
+  --tracking-label: 0.14em;
+
+  /* Spacing and shape. */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 14px;
+  --control-height: 44px;
+
+  --max-width: 1180px;
+}
+
+:root[data-theme='light'] {
+  --base: #f5f7f7;
+  --panel: #ffffff;
+  --inset: #ebeff0;
+  --line: #d9dfe1;
+  --text: #0f1518;
+  --muted: #5a676e;
+  --signal: #0e8a70;
+  --ok: #0e8a70;
+  --caution: #9a6706;
+  --risk: #be3a2e;
+  --reference: #6a777e;
+
+  /* On light, the primary button darkens for contrast against white text. */
+  --primary-bg: #0a6a57;
+  --primary-text: #ffffff;
+
+  --signal-tint: rgba(14, 138, 112, 0.14);
+  --caution-tint: rgba(154, 103, 6, 0.12);
+  --risk-tint: rgba(190, 58, 46, 0.12);
+  --reference-tint: rgba(106, 119, 126, 0.16);
+}
+
+/* Printing is a first-class output here: the report ends up in an A4 thesis. */
+@media print {
+  :root {
+    --base: #ffffff;
+    --panel: #ffffff;
+    --inset: #f2f4f5;
+    --line: #c9d1d4;
+    --text: #0f1518;
+    --muted: #4a575e;
+    --signal: #0a6a57;
+    --ok: #0a6a57;
+    --caution: #7d5305;
+    --risk: #a62f24;
+    --reference: #5c686e;
+  }
+}
