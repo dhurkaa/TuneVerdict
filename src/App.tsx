@@ -4,8 +4,9 @@
  * Two screens, one piece of state: either two sessions are loaded and analysed,
  * or they are not. Everything — parsing, resampling, segmentation, DTW alignment,
  * detection, Monte Carlo, report generation — runs here, in the browser, on the
- * main thread. There is no backend, no database and no API key, which is a
- * privacy property worth stating in the interface as well as in the README.
+ * main thread. The analysis has no backend, no database and no API key; the only
+ * server code is the optional AI explanation endpoint (api/explain.ts), which
+ * holds the operator's key so that no key ever reaches the browser.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -20,6 +21,8 @@ import { buildReport, downloadReport } from './report/buildReport';
 import { LANGUAGE_NAMES, useI18n } from './i18n';
 import type { Language, TranslationKey } from './i18n';
 import type { AnalysisResult, VehicleParameters } from './core/types';
+import type { AiSummary } from './components/AiSummaryPanel';
+import { usePowerUnit } from './display/powerUnit';
 
 type Slot = 'before' | 'after';
 
@@ -67,6 +70,7 @@ const DEFAULT_VEHICLE: VehicleParameters = {
 export function App(): JSX.Element {
   const i18n = useI18n();
   const { t } = i18n;
+  const { unit: powerUnit } = usePowerUnit();
 
   const [slots, setSlots] = useState<Record<Slot, Slotstate>>({
     before: EMPTY_SLOT,
@@ -76,6 +80,7 @@ export function App(): JSX.Element {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [aiSummary, setAiSummary] = useState<AiSummary | null>(null);
   const [analysisFailure, setAnalysisFailure] = useState<Failure | null>(null);
 
   const describe = useCallback(
@@ -163,14 +168,15 @@ export function App(): JSX.Element {
     setExporting(true);
     window.setTimeout(() => {
       try {
-        const blob = buildReport(result, i18n);
+        const summary = aiSummary && aiSummary.resultId === result.computedAt ? aiSummary : null;
+        const blob = buildReport(result, i18n, summary, powerUnit);
         const stamp = result.computedAt.slice(0, 10);
         downloadReport(blob, `tuneverdict-${stamp}.pdf`);
       } finally {
         setExporting(false);
       }
     }, 30);
-  }, [result, i18n]);
+  }, [result, i18n, aiSummary, powerUnit]);
 
   const errors = useMemo(
     () => ({ before: describe(slots.before.error), after: describe(slots.after.error) }),
@@ -191,6 +197,8 @@ export function App(): JSX.Element {
             onBack={() => setResult(null)}
             onExport={handleExport}
             exporting={exporting}
+            aiSummary={aiSummary}
+            onAiSummary={setAiSummary}
           />
         ) : (
           <ImportScreen

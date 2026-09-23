@@ -25,6 +25,18 @@ export interface SyntheticOptions {
   /** True engine peak power, hp, before any atmospheric correction. */
   peakHp: number;
   rpmPeak: number;
+  /**
+   * Fraction of peak power lost at the bottom of the sweep. Raising it makes a
+   * tune that trades low-end torque for top-end power.
+   */
+  lowEndDrop: number;
+  /**
+   * Optional engine torque curve as (rpm, N·m) points, linearly interpolated. When
+   * given it replaces the generic power shape: a turbocharged engine is described
+   * by its torque plateau, and a power shape that looks right can imply torque no
+   * real engine makes.
+   */
+  torqueCurveNm?: readonly (readonly [number, number])[];
   rpmStart: number;
   rpmEnd: number;
 
@@ -48,6 +60,16 @@ export interface SyntheticOptions {
   boostOvershoot: number;
   /** Ripple amplitude as a fraction of target. 0 = none. */
   boostRipple: number;
+  /**
+   * Fraction by which delivered boost falls short of target above
+   * `boostShortfallAboveRpm` — a turbocharger out of flow at the top end. Ramps
+   * in over 500 rpm. 0 = none.
+   */
+  boostShortfall: number;
+  boostShortfallAboveRpm: number;
+
+  /** λ the ECU requests. Logged as a target channel; defaults to `lambda`. */
+  lambdaTarget?: number;
 
   lambda: number;
   /** Lambda applied above `leanAboveRpm`, if set — the lean-under-load fault. */
@@ -73,14 +95,29 @@ export interface SyntheticOptions {
 
   /** Header language and CSV dialect. */
   locale: 'en' | 'de';
-  /** Which logging tool's header style to imitate. */
-  dialect: 'carScanner' | 'torque' | 'tunerStudio';
+  /**
+   * Which logging tool's header style to imitate. 'autotuner' writes what an
+   * Autotuner / Bosch EDC log looks like: millisecond timestamps, absolute
+   * "boost" pressure in mbar, rail pressure in bar, the logged gear and the ECU's
+   * own calculated torque.
+   */
+  dialect: 'carScanner' | 'torque' | 'tunerStudio' | 'autotuner';
+
+  /** Gear number written to the log (autotuner dialect). */
+  gearNumber: number;
+  /**
+   * The ECU-reported torque as a multiple of the torque the engine really makes.
+   * 1 = an honest torque model; 1.12 = a tune that claims 12% more than it
+   * delivers (or a log edited to say so).
+   */
+  ecuTorqueClaimFactor: number;
 }
 
 export const DEFAULT_SYNTHETIC: SyntheticOptions = {
   pulls: 5,
   peakHp: 250,
   rpmPeak: 5000,
+  lowEndDrop: 0.35,
   rpmStart: 2000,
   rpmEnd: 5500,
 
@@ -99,6 +136,8 @@ export const DEFAULT_SYNTHETIC: SyntheticOptions = {
   boostKpa: 120,
   boostOvershoot: 0,
   boostRipple: 0,
+  boostShortfall: 0,
+  boostShortfallAboveRpm: 4500,
 
   lambda: 0.85,
   timingDeg: 12,
@@ -112,20 +151,41 @@ export const DEFAULT_SYNTHETIC: SyntheticOptions = {
 
   locale: 'en',
   dialect: 'carScanner',
+  gearNumber: 3,
+  ecuTorqueClaimFactor: 1,
 };
 
+/** Linear interpolation in an (rpm, N·m) torque curve. */
+function torqueAt(rpm: number, curve: readonly (readonly [number, number])[]): number {
+  const first = curve[0];
+  const last = curve[curve.length - 1];
+  if (!first || !last) return 0;
+  if (rpm <= first[0]) return first[1];
+  if (rpm >= last[0]) return last[1];
+  for (let i = 1; i < curve.length; i++) {
+    const [r1, t1] = curve[i] as readonly [number, number];
+    const [r0, t0] = curve[i - 1] as readonly [number, number];
+    if (rpm <= r1) return t0 + ((t1 - t0) * (rpm - r0)) / (r1 - r0);
+  }
+  return last[1];
+}
+
 /**
- * Engine power curve: a smooth peak at rpmPeak, falling away either side. Not a
- * real engine — a real curve has a torque plateau and a fuel-cut edge — but it is
- * smooth, monotonic in the right places, and its true peak is known exactly, which
- * is what a test needs.
+ * Engine power at an rpm: from the torque curve when one is given, otherwise a
+ * smooth peak at rpmPeak falling away either side — not a real engine, but its
+ * true peak is known exactly, which is what a test needs.
  */
 function enginePowerHp(rpm: number, o: SyntheticOptions): number {
+  if (o.torqueCurveNm) {
+    // P = T·ω, in hp.
+    return (torqueAt(rpm, o.torqueCurveNm) * rpm * 2 * Math.PI) / 60 / PHYSICS.wattsPerHp;
+  }
   const spanLow = o.rpmPeak - o.rpmStart;
   const spanHigh = Math.max(1, o.rpmEnd - o.rpmPeak);
   const x = rpm <= o.rpmPeak ? (rpm - o.rpmPeak) / spanLow : (rpm - o.rpmPeak) / spanHigh;
-  // 35% down at the bottom of the sweep, 8% down at the top: the usual shape.
-  const drop = rpm <= o.rpmPeak ? 0.35 : 0.08;
+  // lowEndDrop down at the bottom of the sweep (35% by default), 8% down at the
+  // top: the usual shape.
+  const drop = rpm <= o.rpmPeak ? o.lowEndDrop : 0.08;
   return o.peakHp * (1 - drop * x * x);
 }
 
@@ -142,10 +202,15 @@ interface Sample {
   coolantC: number;
   ambientC: number;
   lambda: number;
+  lambdaTarget: number;
   timingDeg: number;
   knockDeg: number;
   fuelRailKpa: number;
+  fuelRailTargetKpa: number;
   fuelLevel: number;
+  gear: number;
+  /** The torque the ECU would log: the engine's true torque × the claim factor. */
+  ecuTorqueNm: number;
 }
 
 /** Integrate one pull and return its samples. */
@@ -203,6 +268,10 @@ function sampleAt(
   if (o.boostRipple > 0 && spool >= 1) {
     boost += o.boostKpa * o.boostRipple * Math.sin(rpm / 60) * Math.SQRT2;
   }
+  if (o.boostShortfall > 0 && rpm > o.boostShortfallAboveRpm) {
+    const ramp = Math.min(1, (rpm - o.boostShortfallAboveRpm) / 500);
+    boost -= o.boostKpa * o.boostShortfall * ramp;
+  }
 
   const lean =
     o.leanLambda !== undefined && o.leanAboveRpm !== undefined && rpm >= o.leanAboveRpm;
@@ -226,12 +295,16 @@ function sampleAt(
     coolantC: o.coolantC,
     ambientC: o.iatC,
     lambda: lean ? (o.leanLambda as number) : o.lambda,
+    lambdaTarget: o.lambdaTarget ?? o.lambda,
     timingDeg: o.timingDeg - (knocking ? (o.knockRetardDeg as number) : 0),
     knockDeg: knocking ? (o.knockRetardDeg as number) : 0,
     fuelRailKpa: drooping
       ? o.fuelRailKpa * (1 - (o.railDroopFraction as number))
       : o.fuelRailKpa,
+    fuelRailTargetKpa: o.fuelRailKpa,
     fuelLevel: 0.7,
+    gear: o.gearNumber,
+    ecuTorqueNm: ((enginePowerHp(rpm, o) * PHYSICS.wattsPerHp * 60) / (2 * Math.PI * rpm)) * o.ecuTorqueClaimFactor,
   };
 }
 
@@ -253,6 +326,7 @@ function simulateCoast(o: SyntheticOptions, last: Sample, tStart: number, second
       boostKpa: -60,
       lambda: 1.0,
       knockDeg: 0,
+      ecuTorqueNm: -40,
     });
   }
   return samples;
@@ -279,9 +353,29 @@ export function generateSession(overrides: Partial<SyntheticOptions> = {}): Samp
   return samples;
 }
 
+type HeaderSet = Partial<Record<keyof Sample, string>>;
+
+const AUTOTUNER_HEADERS: HeaderSet = {
+  t: 'timestamp',
+  rpm: 'Engine speed (RPM)',
+  speedKmh: 'Vehicle speed (km/h)',
+  throttle: 'Gaspedal position (%)',
+  mapKpa: 'Boost pressure (mbar)',
+  boostTargetKpa: 'Boost pressure setpoint (mbar)',
+  baroKpa: 'Ambient pressure (hPa)',
+  iatC: 'Intake air temperature (C)',
+  coolantC: 'Engine coolant temperature (C)',
+  ambientC: 'Ambient air temperature (C)',
+  lambda: 'Lambda (AFR) (\u03bb)',
+  fuelRailKpa: 'Fuel high pressure (bar)',
+  fuelRailTargetKpa: 'Fuel high pressure setpoint (bar)',
+  gear: 'Gear (-)',
+  ecuTorqueNm: 'Engine torque (Nm)',
+};
+
 const HEADERS: Record<
-  SyntheticOptions['dialect'],
-  Record<SyntheticOptions['locale'], Record<keyof Sample, string>>
+  Exclude<SyntheticOptions['dialect'], 'autotuner'>,
+  Record<SyntheticOptions['locale'], HeaderSet>
 > = {
   carScanner: {
     en: {
@@ -297,9 +391,11 @@ const HEADERS: Record<
       coolantC: 'Coolant Temperature (°C)',
       ambientC: 'Ambient Air Temperature (°C)',
       lambda: 'Lambda',
+      lambdaTarget: 'Lambda Target',
       timingDeg: 'Timing Advance (°)',
       knockDeg: 'Knock Retard (°)',
       fuelRailKpa: 'Fuel Rail Pressure (kPa)',
+      fuelRailTargetKpa: 'Fuel Rail Pressure Target (kPa)',
       fuelLevel: 'Fuel Level (%)',
     },
     de: {
@@ -315,9 +411,11 @@ const HEADERS: Record<
       coolantC: 'Kühlmitteltemperatur (°C)',
       ambientC: 'Außentemperatur (°C)',
       lambda: 'Lambdawert',
+      lambdaTarget: 'Lambda Soll',
       timingDeg: 'Zündwinkel (°)',
       knockDeg: 'Klopfregelung (°)',
       fuelRailKpa: 'Kraftstoffdruck (kPa)',
+      fuelRailTargetKpa: 'Raildruck Soll (kPa)',
       fuelLevel: 'Tankinhalt (%)',
     },
   },
@@ -335,9 +433,11 @@ const HEADERS: Record<
       coolantC: 'Engine Coolant Temperature(°C)',
       ambientC: 'Ambient Air Temperature(°C)',
       lambda: 'O2 Sensor WR Lambda',
+      lambdaTarget: 'Target Lambda',
       timingDeg: 'Timing Advance(°)',
       knockDeg: 'Knock Retard(°)',
       fuelRailKpa: 'Fuel Rail Pressure(kPa)',
+      fuelRailTargetKpa: 'Target Rail Pressure(kPa)',
       fuelLevel: 'Fuel Level(%)',
     },
     de: {
@@ -353,9 +453,11 @@ const HEADERS: Record<
       coolantC: 'Motortemperatur(°C)',
       ambientC: 'Umgebungstemperatur(°C)',
       lambda: 'Luftverhältnis',
+      lambdaTarget: 'Solllambda',
       timingDeg: 'Zündzeitpunkt(°)',
       knockDeg: 'Zündwinkelrücknahme(°)',
       fuelRailKpa: 'Raildruck(kPa)',
+      fuelRailTargetKpa: 'Sollraildruck(kPa)',
       fuelLevel: 'Tankfüllstand(%)',
     },
   },
@@ -373,9 +475,11 @@ const HEADERS: Record<
       coolantC: 'Coolant Temperature',
       ambientC: 'Ambient Temperature',
       lambda: 'AFR',
+      lambdaTarget: 'AFR Target',
       timingDeg: 'Ignition Advance',
       knockDeg: 'Knock Correction',
-      fuelRailKpa: 'Fuel Pressure',
+      fuelRailKpa: 'Fuel Pressure (kPa)',
+      fuelRailTargetKpa: 'Desired Fuel Pressure (kPa)',
       fuelLevel: 'Fuel Level',
     },
     de: {
@@ -391,9 +495,11 @@ const HEADERS: Record<
       coolantC: 'Kühlmitteltemperatur',
       ambientC: 'Außentemperatur',
       lambda: 'AFR',
+      lambdaTarget: 'AFR Target',
       timingDeg: 'Zündwinkel',
       knockDeg: 'Klopfrücknahme',
-      fuelRailKpa: 'Kraftstoffdruck',
+      fuelRailKpa: 'Kraftstoffdruck (kPa)',
+      fuelRailTargetKpa: 'Sollraildruck (kPa)',
       fuelLevel: 'Tankinhalt',
     },
   },
@@ -412,9 +518,11 @@ const KEYS: (keyof Sample)[] = [
   'coolantC',
   'ambientC',
   'lambda',
+  'lambdaTarget',
   'timingDeg',
   'knockDeg',
   'fuelRailKpa',
+  'fuelRailTargetKpa',
   'fuelLevel',
 ];
 
@@ -422,23 +530,33 @@ const KEYS: (keyof Sample)[] = [
 export function generateCsv(overrides: Partial<SyntheticOptions> = {}): string {
   const o: SyntheticOptions = { ...DEFAULT_SYNTHETIC, ...overrides };
   const samples = generateSession(o);
-  const headers = HEADERS[o.dialect][o.locale];
-  const delimiter = o.locale === 'de' ? ';' : ',';
-  const decimal = o.locale === 'de' ? ',' : '.';
+  const autotuner = o.dialect === 'autotuner';
+  const headers: HeaderSet = autotuner ? AUTOTUNER_HEADERS : HEADERS[o.dialect as Exclude<SyntheticOptions['dialect'], 'autotuner'>][o.locale];
+  const keys = (autotuner ? (Object.keys(AUTOTUNER_HEADERS) as (keyof Sample)[]) : KEYS).filter((k) => headers[k]);
+  const delimiter = o.locale === 'de' && !autotuner ? ';' : ',';
+  const decimal = o.locale === 'de' && !autotuner ? ',' : '.';
 
   const format = (key: keyof Sample, sample: Sample): string => {
     let value = sample[key];
+    if (autotuner) {
+      // Autotuner's units: ms, absolute mbar, hPa, bar.
+      if (key === 't') return Math.round(value * 1000).toString();
+      if (key === 'mapKpa') value = value * 10;
+      if (key === 'boostTargetKpa') value = (value + sample.baroKpa) * 10;
+      if (key === 'baroKpa') value = value * 10;
+      if (key === 'fuelRailKpa' || key === 'fuelRailTargetKpa') value = value / 100;
+    }
     // Percent channels are written as percentages; λ as AFR where the dialect says so.
     if (key === 'throttle' || key === 'fuelLevel') value = value * 100;
-    if (key === 'lambda' && o.dialect === 'tunerStudio') value = value * 14.7;
-    const digits = key === 'rpm' ? 0 : key === 'lambda' ? 3 : 2;
+    if ((key === 'lambda' || key === 'lambdaTarget') && o.dialect === 'tunerStudio') value = value * 14.7;
+    const digits = key === 'rpm' ? 0 : key === 'lambda' || key === 'lambdaTarget' ? 3 : 2;
     return value.toFixed(digits).replace('.', decimal);
   };
 
   const lines: string[] = [];
-  lines.push(KEYS.map((k) => headers[k]).join(delimiter));
+  lines.push(keys.map((k) => headers[k]).join(delimiter));
   for (const sample of samples) {
-    lines.push(KEYS.map((k) => format(k, sample)).join(delimiter));
+    lines.push(keys.map((k) => format(k, sample)).join(delimiter));
   }
   return lines.join('\n');
 }

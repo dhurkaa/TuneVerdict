@@ -121,6 +121,16 @@ export const wattsToHp = (w: number): number => w / PHYSICS.wattsPerHp;
 export const wattsToPs = (w: number): number => w / PHYSICS.wattsPerPs;
 export const hpToWatts = (hp: number): number => hp * PHYSICS.wattsPerHp;
 
+/**
+ * Crank torque in N·m from power in hp at a given rpm: T = P / ω. A positive
+ * linear scaling at fixed rpm, so an interval on power maps directly onto an
+ * interval on torque at that rpm.
+ */
+export function hpToTorqueNm(hp: number, rpm: number): number {
+  if (!Number.isFinite(hp) || !Number.isFinite(rpm) || rpm <= 0) return NaN;
+  return (hp * PHYSICS.wattsPerHp * 60) / (2 * Math.PI * rpm);
+}
+
 /** Torque at the crank, N·m, from power and engine speed. */
 export function torqueNm(watts: number, rpm: number): number {
   if (!Number.isFinite(watts) || !Number.isFinite(rpm) || rpm <= 0) return NaN;

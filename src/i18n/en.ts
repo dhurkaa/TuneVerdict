@@ -54,8 +54,7 @@ export const en = {
   'import.schema.title': 'What was recognised',
   'import.schema.recognised': 'Recognised channels',
   'import.schema.unrecognised': 'Not recognised',
-  'import.schema.unrecognisedHint':
-    'These columns were left out of the analysis. Nothing was guessed from them.',
+  'import.schema.unrecognisedHint': 'These columns were left out of the analysis. Nothing was guessed from them.',
   'import.schema.derived': 'Computed from other channels',
   'import.schema.assumed': 'Assumed',
   'import.schema.missingRecommended': 'Missing, and worth having',
@@ -98,7 +97,7 @@ export const en = {
   'import.empty.protocol': 'What a usable pair of logs looks like',
   'protocol.rule.pulls': '5 full-throttle pulls per session',
   'protocol.rule.gear': 'Third or fourth gear, the same in both sessions',
-  'protocol.rule.rpm': '2000 → 5500 rpm, one continuous sweep',
+  'protocol.rule.rpm': '2000 → 5500 rpm (diesel: 1500 → 4500), one continuous sweep',
   'protocol.rule.road': 'The same road, in the same direction',
   'protocol.rule.temp': 'Intake air temperature within 3 °C between sessions',
   'protocol.rule.fuel': 'Fuel above half a tank',
@@ -113,11 +112,10 @@ export const en = {
     '{label} has no usable time column. Every row needs a timestamp, or the samples cannot be placed on a common time base.',
   'import.error.sampleRate':
     '{label} was logged at {rate} Hz. Below {minimum} Hz the transients this application looks for cannot be recovered, and interpolating up to 10 Hz would invent them.',
-  'import.error.missingRequired':
-    '{label} is missing a channel the analysis cannot run without: {channels}.',
+  'import.error.missingRequired': '{label} is missing a channel the analysis cannot run without: {channels}.',
   'import.error.read': 'The file could not be read.',
   'analysis.error.tooFewPulls':
-    'Only {found} usable pulls were found in {session}, and {minimum} is the minimum. {rejected} candidate pulls were rejected. With fewer than three pulls there is nothing to resample and no way to state a consistency — and a wide interval still reads as an answer.',
+    'No usable full-throttle pull was found in {session}. {rejected} candidate stretches were rejected — too short, crossing a gear change, or with engine speed falling. Log at least one full-throttle pull held in one gear for 500 rpm or more.',
 
   // --- channels ----------------------------------------------------------
   'channel.time': 'Time',
@@ -169,8 +167,6 @@ export const en = {
   'protocol.none': 'Both sessions follow the measurement protocol.',
   'protocol.lead':
     'A comparison across mismatched conditions is the most likely way to get a confident wrong answer, so the conditions are checked before the verdict is read.',
-  'protocol.tooFewPulls':
-    '{session}: {found} usable pulls, {minimum} needed, {expected} asked for by the protocol. {rejected} candidates were rejected.',
   'protocol.fewerPullsThanProtocol':
     '{session}: {found} usable pulls, where the protocol asks for {expected}. The interval will be wider than it needs to be.',
   'protocol.lowSampleRate':
@@ -185,8 +181,7 @@ export const en = {
     '{session}: {pulls} of {total} pulls needed an atmospheric correction outside the band SAE J1349 declares valid. The conditions were too far apart to reconcile by correction alone.',
   'protocol.rpmCoverageHigh':
     '{session} only reached {reached} rpm, short of {expected}. Nothing is claimed above the rpm the pulls actually covered.',
-  'protocol.rpmCoverageLow':
-    '{session} started at {started} rpm, above the {expected} the protocol asks for.',
+  'protocol.rpmCoverageLow': '{session} started at {started} rpm, above the {expected} the protocol asks for.',
   'protocol.gearMismatch':
     'The two sessions were driven in different gears ({before} and {after}). This is the single most likely way to get a confident wrong answer, and the comparison should not be trusted.',
   'protocol.iatMismatch':
@@ -312,8 +307,7 @@ export const en = {
   'confidence.uncalibratedDetector': 'This detector is outside the calibrated set',
   'confidence.lowSampleRate': 'The log is slower than 10 Hz',
   'confidence.outOfBandCorrection': 'The atmospheric correction left its valid band',
-  'confidence.wilsonCap':
-    'Capped: ten correct answers out of ten prove accuracy above 0.72, not above 1.00',
+  'confidence.wilsonCap': 'Capped: ten correct answers out of ten prove accuracy above 0.72, not above 1.00',
 
   // --- result: uncertainty ----------------------------------------------
   'result.uncertainty.title': 'Where the uncertainty comes from',
@@ -365,6 +359,232 @@ export const en = {
   'result.pairing.pair': 'before #{before} ↔ after #{after}',
   'result.pairing.distance': 'distance {distance}',
 
+  // --- result: gain across the band --------------------------------------
+  'result.bands.title': 'Across the rpm range',
+  'result.bands.average': 'Average difference across the compared range',
+  'result.bands.kind.gain': 'gain',
+  'result.bands.kind.loss': 'loss',
+  'result.bands.kind.unproven': 'not proven',
+  'result.bands.band': '{low}–{high} rpm',
+  'result.bands.mean': '{delta} {unit} on average',
+  'result.bands.lossWarning':
+    'The tune loses power somewhere in the range. The peak figure hides this — check whether it is where the car is actually driven.',
+
+  // --- result: requested vs delivered -------------------------------------
+  'result.tracking.title': 'Requested vs delivered',
+  'result.tracking.lead':
+    'What the ECU asked for against what the engine delivered. A value is neither good nor bad on its own; a value short of its request says exactly where the tune and the hardware disagree.',
+  'result.tracking.none':
+    'Neither log carried a target channel (boost target, λ target, rail pressure target, or knock retard with timing), so there is nothing to compare. See "What to log next time".',
+  'result.tracking.requested': 'Requested (dashed)',
+  'result.tracking.delivered': 'Delivered',
+  'result.tracking.band': 'Spread across pulls',
+  'result.tracking.quantity.boost': 'Boost pressure',
+  'result.tracking.quantity.lambda': 'Lambda',
+  'result.tracking.quantity.fuelRail': 'Fuel rail pressure',
+  'result.tracking.quantity.timing': 'Ignition advance',
+  'result.tracking.hint.boost': 'Short of the request once spooled means the turbocharger cannot reach the target.',
+  'result.tracking.hint.lambda': 'Above the request means leaner than the map asked for.',
+  'result.tracking.hint.fuelRail': 'Short of the request means the pump cannot hold the pressure asked for.',
+  'result.tracking.hint.timing': 'Short of the request means the knock controller took timing away.',
+  'result.tracking.reconstructed':
+    'The request is reconstructed as logged advance plus knock retard: no OBD-2 source logs the pre-retard advance directly.',
+  'result.tracking.status.onTarget': 'on target',
+  'result.tracking.status.short': 'short of request',
+  'result.tracking.status.over': 'above request',
+  'result.tracking.status.spooling': 'spooling',
+  'result.tracking.status.insufficient': 'too few pulls',
+  'result.tracking.description':
+    '{quantity} in the {session} session: the requested value as a dashed line and the delivered value as a solid line, against engine speed.',
+
+  // --- result: correction table -------------------------------------------
+  'result.corrections.title': 'Suggested map changes',
+  'result.corrections.lead':
+    'Each change is sized from what this log showed in that cell of the map. Every one moves toward safety — less timing, more fuel, less boost — and none toward power: a log can prove a cell did harm, not that it has headroom.',
+  'result.corrections.caveat':
+    'Starting points for the next session, not final values. Make one change at a time, log again, and compare the two sessions here.',
+  'result.corrections.none': 'Nothing in this log calls for a map change.',
+  'result.corrections.table': 'Table',
+  'result.corrections.rpm': 'rpm',
+  'result.corrections.load': 'Manifold pressure',
+  'result.corrections.change': 'Change',
+  'result.corrections.why': 'Because',
+  'result.corrections.evidence': 'Evidence',
+  'result.corrections.confidence': 'Confidence',
+  'result.corrections.anyLoad': 'any',
+  'result.corrections.evidenceText': '{points} points · pulls {pulls}',
+  'result.corrections.hardwareChange': 'hardware',
+  'result.corrections.parameter.ignition': 'Ignition advance',
+  'result.corrections.parameter.fuel': 'Fuel',
+  'result.corrections.parameter.boost': 'Boost target',
+  'result.corrections.parameter.hardware': 'Fuel system',
+  'result.corrections.cause.knock': 'knock retard up to {observed}°',
+  'result.corrections.cause.lean': 'λ reached {observed}; aiming for {reference}',
+  'result.corrections.cause.boostOvershoot': 'boost up to {observed}% over target',
+  'result.corrections.cause.boostShortfall': '{observed} kPa short of a {reference} kPa target once spooled',
+  'result.corrections.cause.fuelRailDroop':
+    'rail pressure up to {observed}% below reference — check pump, filter and injector capacity',
+
+  // --- result: margins -----------------------------------------------------
+  'result.margins.title': 'Distance to each limit',
+  'result.margins.lead':
+    'How close each zone of the after session came to each detector threshold. "No finding" and "no margin" are different statements, and the second is the one to act on before it becomes the first.',
+  'result.margins.explain':
+    'Distance to the threshold as a percentage of the threshold, for the worst pull. Negative means it was crossed.',
+  'result.margins.limit.knock': 'Knock',
+  'result.margins.limit.lean': 'Lean mixture',
+  'result.margins.limit.boostOvershoot': 'Boost overshoot',
+  'result.margins.limit.fuelRailDroop': 'Rail pressure droop',
+  'result.margins.limit.egt': 'Exhaust temperature',
+  'result.margins.status.ok': 'ok',
+  'result.margins.status.tight': 'tight',
+  'result.margins.status.exceeded': 'crossed',
+  'result.margins.status.unavailable': 'not logged',
+  'result.margins.cell': '{limit}, {zone}: worst pull {worst}%, mean {mean}%, {status}',
+
+  // --- result: logging advice ---------------------------------------------
+  'result.logging.title': 'What to log next time',
+  'result.logging.lead':
+    'Each missing channel removed a class of findings from this analysis. The absence of a finding is not the absence of a problem.',
+  'result.logging.none': 'Both logs carried everything this analysis uses.',
+  'result.logging.both': 'Both sessions',
+  'logging.knockRetard':
+    'Log knock retard. Without it knock cannot be assessed at all — the most important safety finding is simply unavailable.',
+  'logging.lambda': 'Log a wideband λ or AFR channel. Without it a lean mixture under load cannot be detected.',
+  'logging.iat':
+    'Log intake air temperature. Without it the atmospheric correction assumes 20 °C and heat-soak cannot be seen.',
+  'logging.baro':
+    'Log barometric pressure. Sea level was assumed, which moves the correction by roughly 1% per 100 m of altitude.',
+  'logging.boostTarget':
+    'Log the boost target. Overshoot was measured against the settled plateau instead, and requested-vs-delivered boost is unavailable.',
+  'logging.boost': 'Log boost or manifold pressure. Boost behaviour could not be assessed.',
+  'logging.lambdaTarget':
+    'Log the λ target. Without it fuel suggestions aim for a generic λ 0.85 rather than what the map asks for.',
+  'logging.fuelRail':
+    'Log fuel rail pressure. A fuel system running out of capacity at the top end cannot be seen without it.',
+  'logging.fuelRailTarget': 'Log the rail pressure target. Droop was measured against the start of each pull instead.',
+  'logging.timing': 'Log ignition advance. The timing request cannot be reconstructed without it.',
+  'logging.coolant': 'Log coolant temperature, so the check that the engine was at operating temperature can run.',
+  'logging.gear':
+    'Log the gear if your app offers it. Gears were recovered from rpm against speed, which gives only a relative label.',
+  'logging.sampleRate':
+    'Log faster: {rate} Hz was recorded, {target} Hz is the target. Most apps log faster when fewer channels are selected at once.',
+
+  // --- AI explanation ----------------------------------------------------
+  'ai.title': 'Ask about this result',
+  'ai.badge': 'AI',
+  'ai.lead':
+    'An AI model can explain this result in plain language and answer questions about it. It sees only the finished summary, never your log files, and it cannot change any number, finding or the verdict.',
+  'ai.notVerdict': 'AI explanation — not part of the verdict. The calibrated analysis above is the result.',
+  'ai.privacy':
+    'Asking sends the analysis summary — numbers, findings, suggested changes, not the CSV files — to the AI service.',
+
+  'ai.summary.title': 'Key messages',
+  'ai.summary.privacy':
+    'Written by an external AI service from the analysis summary — numbers and findings, not the CSV files.',
+  'ai.summary.writing': 'Writing the summary…',
+  'ai.summary.write': 'Write summary',
+  'ai.summary.rewrite': 'Write again',
+  'ai.summary.otherLanguage': 'Written in the other language — write again to switch.',
+  'ai.question': 'Your question',
+  'ai.placeholder': 'e.g. Which change should I make first, and why?',
+  'ai.suggest.explain': 'Explain this result simply',
+  'ai.suggest.first': 'Which change should I make first?',
+  'ai.suggest.confidence': 'Why is the confidence not higher?',
+  'ai.ask': 'Ask',
+  'ai.asking': 'Answering…',
+  'ai.stop': 'Stop',
+  'ai.clear': 'Clear conversation',
+  'ai.you': 'You',
+  'ai.model': 'AI',
+  'ai.error.rate': 'Rate limit reached — wait a moment and try again.',
+  'ai.error.network': 'Could not reach the AI service. Check the connection.',
+  'ai.error.refused': 'The model declined to answer this question.',
+  'ai.error.generic': 'The request failed. Try again in a moment.',
+  'ai.error.unavailable': 'The AI assistant is not available right now.',
+
+  // --- dashboard ---------------------------------------------------------
+  'result.unit': 'Power unit',
+  'chart.title': 'Torque and power',
+  'chart.torque': 'Torque',
+  'chart.power': 'Power',
+  'chart.bands': '95% intervals',
+  'chart.gain': 'Gain',
+  'chart.hint': 'hover or use the arrow keys to read any rpm',
+  'chart.description':
+    'Torque and power against engine speed. Torque on the left axis in Nm, power on the right axis in {unit}. Before the tune as dashed lines; after as solid lines with a shaded 95% interval. Peak torque {torqueBefore} to {torqueAfter} Nm, peak power {powerBefore} to {powerAfter} {unit}.',
+  'headline.average': 'average {value} {unit} across the range',
+  'headline.clean': 'No findings',
+  'headline.risks': 'Risks: {count}',
+  'headline.cautions': 'Cautions: {count}',
+  'headline.changes': 'Map changes: {count}',
+  'headline.warnings': 'Warnings: {count}',
+  'keypoints.title': 'Key points',
+  'keypoints.clean':
+    'Clean result: no safety findings, nothing to change in the map, the engine delivers what the ECU asks for, and the measurement followed the protocol.',
+  'keypoints.more': '+{count} more',
+  'keypoints.open': 'Open',
+  'keypoints.measurement': 'Measurement',
+  'keypoints.protocol': 'The comparison may not be valid: {count} protocol problems',
+  'keypoints.warnings': 'Protocol warnings: {count}',
+  'keypoints.safety': 'Safety',
+  'keypoints.changes': 'Change in the map',
+  'keypoints.tracking': 'Not delivered',
+  'keypoints.short': '{quantity} short of request at {low}–{high} rpm ({error})',
+  'keypoints.over': '{quantity} above request at {low}–{high} rpm ({error})',
+  'keypoints.band': 'Power band',
+  'keypoints.loss': 'Loses {delta} {unit} at {low}–{high} rpm',
+  'keypoints.tight': 'Zones within 5% of a limit: {count}',
+  'tabs.label': 'Details',
+  'tabs.changes': 'Map changes',
+  'tabs.findings': 'Findings',
+  'tabs.tracking': 'Requested vs delivered',
+  'tabs.limits': 'Limits',
+  'tabs.band': 'Across the rpm range',
+  'tabs.uncertainty': 'Validity & uncertainty',
+  'tabs.sessions': 'Sessions & pulls',
+  'tabs.protocol': 'Protocol & logging',
+  'tabs.ask': 'Ask AI',
+  'import.vehicle.advanced': 'Advanced vehicle parameters',
+  'import.vehicle.massShortHint': 'Weigh the car: mass is the largest source of uncertainty.',
+  'import.schema.summary': 'Channels: {recognised} recognised · {missing} worth adding · {unrecognised} not recognised',
+
+  // --- Autotuner / ECU logs ----------------------------------------------
+  'channel.ecuTorque': 'ECU-reported torque',
+  'import.assumed.absoluteBoost':
+    'The boost column holds absolute pressure (it reads near ambient at part load), as Bosch-based loggers such as Autotuner record it. It was read as manifold pressure and converted to boost by subtracting barometric pressure.',
+  'segment.rejected.otherGear': 'a different gear from the one both sessions share',
+  'protocol.assumedScatter':
+    '{session}: {found} usable pull(s), where {needed} are needed to measure pull-to-pull scatter. The interval and the significance test assume a {cv}% scatter instead. Log more pulls in the same gear for a measured answer.',
+  'protocol.lambdaLooksDiesel':
+    'Under full load λ sits around {lambda}, which is a diesel, not a petrol engine. Check the fuel setting: it decides how AFR is converted and whether the lean-mixture check runs.',
+  'chart.source.label': 'Torque source',
+  'chart.source.measured': 'From acceleration',
+  'chart.source.ecu': 'ECU log',
+  'chart.ecuNote':
+    'ECU log: the engine controller’s own full-load torque, from every settled full-load sample in every gear of the log. Power is torque × rpm, at the crank — the figure a map-pack viewer and the manufacturer quote.',
+  'chart.measuredNote':
+    'From acceleration: power worked out from how fast the car gained speed, using the mass and drag you entered. Only the one gear both logs share can be compared this way, and a slope or a wrong mass shifts it.',
+  'keypoints.ecu': 'Cross-check from acceleration',
+  'keypoints.ecuModelOff':
+    'On the stock log, power from acceleration reads {offset}% against the ECU. The mass, drag or road slope does not fit this log, so the acceleration figures are a cross-check only.',
+  'keypoints.ecuNotDelivered':
+    'The ECU reports {reported} Nm more, but the car’s acceleration in the log did not change accordingly ({measured} Nm). Check that the “after” log is a real drive and not the “before” log with edited values.',
+  'headline.ecuVerdict': 'Gain · from the ECU log',
+  'headline.ecuBasis': 'ECU full-load torque, all gears · {count} rpm points',
+  'headline.ecuAverage': 'average {value} Nm across the range',
+  'headline.measuredCrossCheck': 'from acceleration (stock): {value} {unit}',
+  'headline.crossCheck.confirmed': 'Acceleration confirms it: {measured} Nm',
+  'headline.crossCheck.notDelivered': 'Acceleration did not change: {measured} Nm',
+  'headline.crossCheck.exceeds': 'Acceleration shows more: {measured} Nm',
+  'headline.crossCheck.undetermined': 'No acceleration cross-check in the shared rpm',
+  'keypoints.ecuExceeds':
+    'The car delivered {measured} Nm, more than the {reported} Nm the ECU reports: the torque model was not updated with the tune.',
+  'keypoints.ecuConfirmed': 'The ECU-reported change ({reported} Nm) matches what the car delivered ({measured} Nm).',
+  'report.section.ecu': 'ECU-reported vs measured torque',
+  'report.ecu.reported': 'Change reported by the ECU',
+  'report.ecu.measured': 'Change the car delivered (measured)',
+
   // --- export ------------------------------------------------------------
   'result.export': 'Export report (PDF)',
   'result.exporting': 'Preparing…',
@@ -378,6 +598,12 @@ export const en = {
   'report.section.sessions': 'Sessions',
   'report.section.uncertainty': 'Uncertainty',
   'report.section.protocol': 'Protocol',
+  'report.section.bands': 'Across the rpm range',
+  'report.section.tracking': 'Requested vs delivered',
+  'report.section.corrections': 'Suggested map changes',
+  'report.section.margins': 'Distance to each limit',
+  'report.section.logging': 'What to log next time',
+  'report.section.aiSummary': 'Key messages (AI — not part of the verdict)',
   'report.footer':
     'Computed in the browser from two OBD-2 logs. No sample data, no server, no language model in the pipeline.',
 
@@ -394,6 +620,51 @@ export const en = {
   'unit.lambda': 'λ',
   'unit.seconds': 's',
   'unit.sd': 'σ',
+  'health.title': 'Car health check',
+  'health.lead': 'What the logs say about the condition of the car, system by system. Each status comes from fixed rules on the measured values; the AI mechanic explains them.',
+  'health.score': 'Health score',
+  'health.scoreStock': 'stock log: {score}',
+  'health.label.healthy': 'Healthy',
+  'health.label.watch': 'Keep an eye on it',
+  'health.label.attention': 'Needs attention',
+  'health.label.unknown': 'Not enough data',
+  'health.status.good': 'Good',
+  'health.status.watch': 'Watch',
+  'health.status.concern': 'Concern',
+  'health.status.unknown': 'Not logged',
+  'health.stock': 'Stock: {status}',
+  'health.limit': 'limit {value}',
+  'health.notLogged': 'This log does not carry what this system is judged on.',
+  'health.system.turbo': 'Turbo & boost',
+  'health.system.fuel': 'Fuel system',
+  'health.system.combustion': 'Combustion',
+  'health.system.thermal': 'Temperatures',
+  'health.system.delivery': 'Torque delivery',
+  'health.metric.boostPeak': 'Peak boost',
+  'health.metric.boostTracking': 'Boost vs target, worst zone',
+  'health.metric.railPeak': 'Peak rail pressure',
+  'health.metric.railTracking': 'Rail vs target, worst zone',
+  'health.metric.injectorDuty': 'Injector duty, max',
+  'health.metric.lambdaMin': 'Lowest λ under load',
+  'health.metric.lambdaTracking': 'λ vs target, worst zone',
+  'health.metric.knockMax': 'Knock retard, max',
+  'health.metric.coolantMax': 'Coolant, max',
+  'health.metric.oilMax': 'Oil, max',
+  'health.metric.egtMax': 'Exhaust gas, max',
+  'health.metric.iatRise': 'Intake air rise over the session',
+  'health.metric.consistency': 'Pull-to-pull variation',
+  'health.metric.ecuDelivered': 'Delivered minus ECU-reported torque change',
+  'health.ai.title': 'AI mechanic',
+  'health.ai.checks': 'What to check in the workshop',
+  'health.ai.reading': 'The AI mechanic is reading the logs…',
+  'health.ai.ask': 'Ask the AI mechanic',
+  'health.ai.again': 'Ask again',
+  'health.ai.unreadable': 'The AI answer could not be read. Ask again.',
+  'health.ai.note': 'AI notes explain the statuses; they do not set them.',
+  'logging.egt':
+    'Log exhaust gas temperature. On a diesel it is the limit a tune reaches first, and without it the thermal margin cannot be judged.',
+  'logging.lambdaTargetDiesel':
+    'Log a λ or AFR channel. On a diesel it is what shows how close the injected quantity runs to the smoke limit.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -51,6 +51,9 @@ describe('translations', () => {
       'channel.lambda',
       'result.chart.power',
       'common.of',
+      // Product names.
+      'ai.settings.provider.openai',
+      'ai.settings.provider.anthropic',
     ]);
 
     for (const key of keys) {

@@ -34,7 +34,7 @@ npm run dev
 ```
 
 ```bash
-npm test          # 116 tests: units, schema, signal, statistics, pipeline, PDF, i18n
+npm test          # 203 tests: units, schema, signal, statistics, pipeline, torque, corrections, Autotuner logs, ECU torque, PDF, i18n, AI endpoint
 npm run build     # static bundle in dist/
 ```
 
@@ -99,6 +99,33 @@ The pipeline, in order, one module per stage:
 | 9 | `core/uncertainty.ts` | Monte Carlo propagation |
 | — | `core/pipeline.ts` | the order they run in, and nothing else |
 
+### The result screen
+
+One screen, read like a dyno sheet: the verdict and the key figures across the top
+(power and torque before → after, gain, safety), **one chart with torque (N·m, left
+axis) and power (PS / hp / kW, right axis)** — before dashed, after solid with its
+95% band, peaks marked, a hover or arrow-key readout at any rpm, and the
+"608 Nm @ 3000 · 294 PS @ 4000 rpm" lines underneath — with the key points beside
+it and everything else in tabs. Peak torque has its own Monte Carlo interval: it is
+not peak power scaled, because it sits at a different rpm. The same chart is drawn
+into the PDF report.
+
+After the verdict, five deterministic stages turn it into something a tuner can
+act on:
+
+| module | what it does |
+|---|---|
+| `core/bands.ts` | splits the rpm range into proven gain, proven loss and not proven — a peak figure hides a low-end loss |
+| `core/tracking.ts` | requested vs delivered for boost, λ, rail pressure and (reconstructed) ignition advance — the core principle, made visible |
+| `core/corrections.ts` | places findings into rpm × manifold-pressure cells and sizes a change per cell from the evidence |
+| `core/margins.ts` | distance to each detector threshold per zone, using exactly the series the detectors read |
+| `core/loggingAdvice.ts` | what the next recording should include, and what its absence cost this one |
+
+The correction table obeys one rule without exception: **every suggestion moves
+toward safety** — less advance, more fuel, less boost — **and none toward power**.
+A log can prove that a cell did harm; it cannot prove that a cell has headroom.
+There is a test that fails if the table ever suggests otherwise.
+
 `core/channels.ts` holds 230 header aliases across Car Scanner, Torque Pro, OBDLink
 and TunerStudio, English and German, each declaring the unit its values should be
 read as.
@@ -110,11 +137,69 @@ carries which pulls it appeared in, how many samples crossed the threshold, whic
 channel it read, whether that channel was measured or derived, and a confidence
 whose every adjustment is recorded for display.
 
+### Car health check
+
+Below the chart, `core/health.ts` grades five systems of the car — turbo & boost,
+fuel system, combustion, temperatures and torque delivery — as good, watch,
+concern or not logged, on both logs, from fixed thresholds (`HEALTH_*` in
+`constants.ts`), the detector findings and requested-vs-delivered tracking. Each
+system shows the measured values behind its status, and a 0–100 score summarises
+the systems the log could judge.
+
+When the AI is configured, the **AI mechanic** reads that check (mode `health` of
+`/api/explain`, instruction fixed on the server) and answers in JSON: a note under
+each system on what the values mean for the car and their likely causes, an
+overall condition, and a workshop checklist. It explains the statuses; it never
+sets them, and the panel says so.
+
 ### Reproducibility
 
 The bootstrap and the Monte Carlo never touch `Math.random`. The seed is derived
 from the input files themselves (`seedFrom`) and reported with the result, so the
 same two logs produce byte-identical output on a later run. There is a test for it.
+
+### AI explanation (operator-provided)
+
+Every comparison gets an automatic **"Key messages"** summary under the verdict,
+and the result screen ends with an **"Ask about this result"** panel for follow-up
+questions. The summary is included in the PDF under its own heading, marked as not
+part of the verdict. Customers need no account and no key, and see no settings.
+
+**The key is the operator's and it lives on the server, never in the browser.**
+The analysis still runs entirely client-side; the only server code is one function,
+`api/explain.ts` (logic in `server/explain.ts`), that holds the key, adds the fixed
+instructions and relays the answer. A key in the front-end bundle would be
+published to every visitor — anyone could copy it from the browser's developer
+tools and spend it.
+
+| where | how to set the key |
+|---|---|
+| local development | copy `.env.example` to `.env.local` and set `OPENAI_API_KEY=sk-...`; `npm run dev` serves `/api/explain` itself |
+| Vercel | Project → Settings → Environment Variables → `OPENAI_API_KEY` (optionally `OPENAI_MODEL`, default `gpt-5.5`) |
+
+Never prefix the variable with `VITE_`: Vite copies `VITE_*` variables into the
+browser bundle. `ANTHROPIC_API_KEY` works as an alternative provider when no
+OpenAI key is set. Without any key the AI panels simply do not appear.
+
+The AI is the phrasing layer CLAUDE.md allows on top of a finished report, and it
+cannot become part of the pipeline:
+
+- It runs only after the analysis is complete and receives the finished summary
+  (numbers, findings, suggested changes, already translated) — never the CSV files.
+  Nothing it returns feeds back into any number, finding or verdict.
+- The instructions are set by the server, not the page: the model is told the
+  analysis is final, to work only from the correction table, never to suggest more
+  advance, more boost or a leaner mixture, and to decline unrelated requests.
+
+**Cost and abuse.** The operator pays for every request, so the endpoint accepts
+only what the application sends: the context must parse as a TuneVerdict result,
+the summary uses a fixed instruction, questions are size-limited, answers are
+capped at 4000 tokens, and each client address gets 30 requests per 10 minutes
+(per server instance). A public endpoint without user accounts cannot be made
+abuse-proof, so **set a monthly spending limit in the OpenAI dashboard.**
+
+This is a deliberate, narrow exception to constraint 2 (no backend, no API keys):
+the analysis has no backend and needs no key; only the optional AI does.
 
 ---
 
@@ -173,13 +258,40 @@ Two known biases, both documented in the code rather than corrected away:
 
 ## Measurement protocol
 
-5 pulls per session · gear 3 or 4 · 2000→5500 rpm · same road and direction ·
+5 pulls per session · gear 3 or 4 · 2000→5500 rpm (diesel: 1500→4500) · same road and direction ·
 ΔT < 3 °C between sessions · fuel above 50% · engine at operating temperature.
 
 `core/protocol.ts` checks all of it and reports violations beside the verdict, not
 after it: a comparison across mismatched conditions is the single most likely way
 for a user to get a confident wrong answer, and the failure is invisible in the
 result — the numbers look exactly as convincing as real ones.
+
+### Logger logs (Autotuner, Bosch EDC and similar)
+
+Logs written by ECU flashing tools import directly: millisecond timestamps are
+detected from the median step, "Boost pressure" that is really absolute manifold
+pressure (mbar) is detected from its closed-pedal reading and converted to gauge,
+rail pressure in bar and the logged gear are recognised. A run through several
+gears is split at the gear changes and the gear both sessions share is compared.
+
+A single pull per session is accepted, but the verdict then uses an *assumed*
+3% pull-to-pull scatter (`PRIOR_PULL_CV`) instead of a measured one, and says so.
+When both logs carry the ECU's own calculated torque, **that is the primary
+basis of the result**: the headline, the chart and the report lead with the ECU's
+full-load curve, built from every settled high-pedal sample in every gear (the
+kick-down ramp and the half-second overshoot after it are left out; part-pedal
+samples on the torque limiter are kept — a turbo-diesel reaches it well before the
+pedal is floored — and neighbouring rpm bins are averaged 1-2-1). Power is torque ×
+rpm at the crank, the figure the manufacturer quotes. On the reference Mercedes
+220d (OM654) stock log this gives 387 Nm @ 3400 / 192 PS against the factory
+400 Nm (held to 2800 rpm, below what the log covers) / 194 PS.
+
+The chart fits both axes to the data, with shared gridlines, and draws each curve
+as a monotone cubic through the points: smooth, but never above or below a
+logged value. The PDF draws the same curves.
+The power measured from acceleration stays beside it as a cross-check; when it
+disagrees with the ECU on the stock log by more than 10%, the vehicle model is
+off for that log and the result says so.
 
 Mass deserves its own warning, which the UI gives: for a ±5 hp claim the car's mass
 must be known to within 1.44%, which is ±22 kg on 1500 kg. Weigh the car; do not
@@ -231,16 +343,23 @@ switching language re-renders a completed analysis instead of discarding it.
 
 ## Deployment
 
-Push to `main`. The workflow typechecks, runs the tests, builds with the correct
-base path and publishes to GitHub Pages. Enable Pages for the repository with
-"GitHub Actions" as the source; no other configuration is needed.
+**Vercel (recommended — required for the AI).** Import the repository in Vercel; it
+detects Vite, builds `dist/` and deploys `api/explain.ts` as a serverless function.
+Set `OPENAI_API_KEY` under Environment Variables and redeploy.
+
+**GitHub Pages.** Pushing to `main` also typechecks, tests, builds with the correct
+base path and publishes to Pages. Pages serves static files only, so the AI panels
+do not appear there; everything else works.
 
 ---
 
 ## Project structure
 
 ```
+api/explain.ts     Vercel function: the AI endpoint (holds the key)
+server/            its logic and the provider calls, shared with the dev server
 src/
+  ai/              the AI client (talks to /api/explain only) and the prompts
   core/            the pipeline — no React, no DOM, fully testable
     constants.ts   every threshold, with its provenance
     channels.ts    230 header aliases, EN/DE, with units

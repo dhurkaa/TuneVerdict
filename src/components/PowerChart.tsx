@@ -1,5 +1,5 @@
 /**
- * The power curves, drawn as inline SVG.
+ * Chart helpers and the difference chart, drawn as inline SVG.
  *
  * No chart library. The rules are fixed and few, so a library would mostly be
  * something to fight:
@@ -14,20 +14,19 @@
  */
 
 import { useI18n } from '../i18n';
+import { usePowerUnit } from '../display/powerUnit';
 import type { PowerCurvePoint } from '../core/types';
 
-const WIDTH = 920;
-const HEIGHT = 380;
-const MARGIN = { top: 16, right: 20, bottom: 44, left: 62 } as const;
+export const WIDTH = 920;
+export const MARGIN = { top: 16, right: 20, bottom: 44, left: 62 } as const;
 
-const PLOT_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
-const PLOT_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
+export const PLOT_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
 
-interface Scale {
+export interface Scale {
   (value: number): number;
 }
 
-function linearScale(domain: [number, number], range: [number, number]): Scale {
+export function linearScale(domain: [number, number], range: [number, number]): Scale {
   const [d0, d1] = domain;
   const [r0, r1] = range;
   const span = d1 - d0 || 1;
@@ -35,15 +34,17 @@ function linearScale(domain: [number, number], range: [number, number]): Scale {
 }
 
 /** Nice round tick values covering a domain. */
-function ticks(min: number, max: number, count: number): number[] {
+export function ticks(min: number, max: number, count: number): number[] {
   const span = max - min;
   if (!Number.isFinite(span) || span <= 0) return [min];
   const rough = span / count;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10;
-  const start = Math.ceil(min / step) * step;
+  const start = Math.ceil(min / step - 1e-9) * step;
   const out: number[] = [];
-  for (let value = start; value <= max + step / 2; value += step) out.push(Number(value.toFixed(6)));
+  // Ticks stay inside the domain: a label past the last data point would sit
+  // outside the plot and suggest a range the chart does not cover.
+  for (let value = start; value <= max + step * 1e-6; value += step) out.push(Number(value.toFixed(6)));
   return out;
 }
 
@@ -52,7 +53,7 @@ function ticks(min: number, max: number, count: number): number[] {
  * straight segment bridging it. Drawing through a gap would assert a measurement
  * that was never made.
  */
-function segments<T>(points: T[], isValid: (point: T) => boolean): T[][] {
+export function segments<T>(points: T[], isValid: (point: T) => boolean): T[][] {
   const out: T[][] = [];
   let current: T[] = [];
   for (const point of points) {
@@ -66,11 +67,11 @@ function segments<T>(points: T[], isValid: (point: T) => boolean): T[][] {
   return out;
 }
 
-function linePath(points: { x: number; y: number }[]): string {
+export function linePath(points: { x: number; y: number }[]): string {
   return points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 }
 
-function bandPath(points: { x: number; lo: number; hi: number }[]): string {
+export function bandPath(points: { x: number; lo: number; hi: number }[]): string {
   if (points.length === 0) return '';
   const top = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.hi.toFixed(2)}`);
   const bottom = [...points]
@@ -79,96 +80,12 @@ function bandPath(points: { x: number; lo: number; hi: number }[]): string {
   return `${top.join(' ')} ${bottom.join(' ')} Z`;
 }
 
-export function PowerChart({ curve }: { curve: readonly PowerCurvePoint[] }): JSX.Element | null {
-  const { t, n } = useI18n();
-
-  // Only where both sessions produced a value. The coverage rule lives in the
-  // pipeline; the chart simply refuses to draw where it returned nothing.
-  const points = curve.filter(
-    (p) => Number.isFinite(p.before.value) && Number.isFinite(p.after.value),
-  );
-  if (points.length < 2) return null;
-
-  const rpmMin = points[0]?.rpm ?? 0;
-  const rpmMax = points[points.length - 1]?.rpm ?? 0;
-
-  let yMax = 0;
-  for (const point of points) {
-    for (const value of [point.before.hi, point.after.hi, point.before.value, point.after.value]) {
-      if (Number.isFinite(value)) yMax = Math.max(yMax, value);
-    }
-  }
-  yMax = Math.ceil((yMax * 1.06) / 25) * 25;
-
-  const x = linearScale([rpmMin, rpmMax], [MARGIN.left, MARGIN.left + PLOT_WIDTH]);
-  const y = linearScale([0, yMax], [MARGIN.top + PLOT_HEIGHT, MARGIN.top]);
-
-  const peakBefore = Math.max(...points.map((p) => (Number.isFinite(p.before.value) ? p.before.value : 0)));
-  const peakAfter = Math.max(...points.map((p) => (Number.isFinite(p.after.value) ? p.after.value : 0)));
-
-  const beforeSegments = segments(points, (p) => Number.isFinite(p.before.value));
-  const afterSegments = segments(points, (p) => Number.isFinite(p.after.value));
-  const beforeBands = segments(points, (p) => Number.isFinite(p.before.lo) && Number.isFinite(p.before.hi));
-  const afterBands = segments(points, (p) => Number.isFinite(p.after.lo) && Number.isFinite(p.after.hi));
-
-  return (
-    <figure style={{ margin: 0 }} className="stack">
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        width="100%"
-        role="img"
-        aria-label={t('result.chart.description', {
-          before: n(peakBefore, 1),
-          after: n(peakAfter, 1),
-        })}
-        style={{ display: 'block' }}
-      >
-        <Grid x={x} y={y} yMax={yMax} rpmMin={rpmMin} rpmMax={rpmMax} unit={t('result.chart.power')} rpmUnit={t('result.chart.rpm')} />
-
-        {beforeBands.map((segment, i) => (
-          <path
-            key={`bb${i}`}
-            d={bandPath(segment.map((p) => ({ x: x(p.rpm), lo: y(p.before.lo), hi: y(p.before.hi) })))}
-            fill="var(--reference-tint)"
-          />
-        ))}
-        {afterBands.map((segment, i) => (
-          <path
-            key={`ab${i}`}
-            d={bandPath(segment.map((p) => ({ x: x(p.rpm), lo: y(p.after.lo), hi: y(p.after.hi) })))}
-            fill="var(--signal-tint)"
-          />
-        ))}
-
-        {beforeSegments.map((segment, i) => (
-          <path
-            key={`bl${i}`}
-            d={linePath(segment.map((p) => ({ x: x(p.rpm), y: y(p.before.value) })))}
-            fill="none"
-            stroke="var(--reference)"
-            strokeWidth={2}
-            strokeDasharray="6 4"
-          />
-        ))}
-        {afterSegments.map((segment, i) => (
-          <path
-            key={`al${i}`}
-            d={linePath(segment.map((p) => ({ x: x(p.rpm), y: y(p.after.value) })))}
-            fill="none"
-            stroke="var(--signal)"
-            strokeWidth={2.5}
-          />
-        ))}
-      </svg>
-      <Legend />
-      <figcaption className="field-hint">{t('result.chart.coverage')}</figcaption>
-    </figure>
-  );
-}
-
 export function DeltaChart({ curve }: { curve: readonly PowerCurvePoint[] }): JSX.Element | null {
   const { t } = useI18n();
-  const points = curve.filter((p) => Number.isFinite(p.delta.value));
+  const { unit, powerEstimate } = usePowerUnit();
+  const points = curve
+    .filter((p) => Number.isFinite(p.delta.value))
+    .map((p) => ({ ...p, delta: powerEstimate(p.delta) }));
   if (points.length < 2) return null;
 
   const rpmMin = points[0]?.rpm ?? 0;
@@ -200,6 +117,9 @@ export function DeltaChart({ curve }: { curve: readonly PowerCurvePoint[] }): JS
         aria-label={t('result.chart.deltaDescription')}
         style={{ display: 'block' }}
       >
+        <text x={MARGIN.left - 10} y={MARGIN.top - 4} textAnchor="end" fontSize={11} fill="var(--muted)">
+          {unit}
+        </text>
         {ticks(yLo, yHi, 4).map((value) => (
           <g key={value}>
             <line
@@ -280,100 +200,7 @@ export function DeltaChart({ curve }: { curve: readonly PowerCurvePoint[] }): JS
   );
 }
 
-function Grid({
-  x,
-  y,
-  yMax,
-  rpmMin,
-  rpmMax,
-  unit,
-  rpmUnit,
-}: {
-  x: Scale;
-  y: Scale;
-  yMax: number;
-  rpmMin: number;
-  rpmMax: number;
-  unit: string;
-  rpmUnit: string;
-}): JSX.Element {
-  return (
-    <g>
-      {ticks(0, yMax, 5).map((value) => (
-        <g key={value}>
-          <line
-            x1={MARGIN.left}
-            x2={MARGIN.left + PLOT_WIDTH}
-            y1={y(value)}
-            y2={y(value)}
-            stroke="var(--line)"
-            strokeWidth={1}
-          />
-          <text
-            x={MARGIN.left - 10}
-            y={y(value) + 4}
-            textAnchor="end"
-            className="mono"
-            fontSize={11}
-            fill="var(--muted)"
-          >
-            {value}
-          </text>
-        </g>
-      ))}
-      {ticks(rpmMin, rpmMax, 6).map((value) => (
-        <text
-          key={value}
-          x={x(value)}
-          y={MARGIN.top + PLOT_HEIGHT + 22}
-          textAnchor="middle"
-          className="mono"
-          fontSize={11}
-          fill="var(--muted)"
-        >
-          {value}
-        </text>
-      ))}
-      <text x={MARGIN.left - 10} y={MARGIN.top - 4} textAnchor="end" fontSize={11} fill="var(--muted)">
-        {unit}
-      </text>
-      <text
-        x={MARGIN.left + PLOT_WIDTH}
-        y={MARGIN.top + PLOT_HEIGHT + 38}
-        textAnchor="end"
-        fontSize={11}
-        fill="var(--muted)"
-      >
-        {rpmUnit}
-      </text>
-    </g>
-  );
-}
-
-function Legend(): JSX.Element {
-  const { t } = useI18n();
-  return (
-    <div className="row" style={{ gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-      <LegendItem colour="var(--reference)" dashed label={t('result.chart.before')} />
-      <LegendItem colour="var(--signal)" label={t('result.chart.after')} />
-      <span className="row" style={{ gap: 8 }}>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 22,
-            height: 10,
-            background: 'var(--signal-tint)',
-            border: '1px solid var(--line)',
-            borderRadius: 2,
-          }}
-        />
-        <span className="field-hint">{t('result.chart.band')}</span>
-      </span>
-    </div>
-  );
-}
-
-function LegendItem({
+export function LegendItem({
   colour,
   label,
   dashed = false,

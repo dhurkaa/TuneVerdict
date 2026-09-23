@@ -211,6 +211,210 @@ export interface Recommendation {
 }
 
 // ---------------------------------------------------------------------------
+// Requested vs delivered
+// ---------------------------------------------------------------------------
+
+/** A quantity the ECU asks for and the engine then either delivers or does not. */
+export type TrackedQuantity = 'boost' | 'lambda' | 'fuelRail' | 'timing';
+
+export interface TrackingPoint {
+  readonly rpm: number;
+  readonly requested: Estimate;
+  readonly delivered: Estimate;
+  /** delivered − requested, in the quantity's canonical unit. */
+  readonly error: Estimate;
+  readonly pulls: number;
+}
+
+/**
+ * How a zone tracked its request. `spooling` separates a turbocharger that has
+ * not yet built boost — normal, and not the tune's fault — from one that never
+ * reaches its target, which is the finding a tuner can act on.
+ */
+export type TrackingStatus = 'onTarget' | 'short' | 'over' | 'spooling' | 'insufficient';
+
+export interface TrackingZone {
+  readonly zone: Zone;
+  /**
+   * Mean error relative to the request (degrees for timing), with an interval
+   * across pulls. Positive means more than was asked for.
+   */
+  readonly error: Estimate;
+  readonly status: TrackingStatus;
+}
+
+export interface TrackingSeries {
+  readonly quantity: TrackedQuantity;
+  readonly session: 'before' | 'after';
+  /**
+   * Whether the request was logged directly or reconstructed. Timing requests are
+   * always reconstructed (logged advance plus knock retard), and the UI says so.
+   */
+  readonly requestSource: 'logged' | 'reconstructed';
+  readonly points: readonly TrackingPoint[];
+  readonly zones: readonly TrackingZone[];
+}
+
+// ---------------------------------------------------------------------------
+// ECU-reported torque
+// ---------------------------------------------------------------------------
+
+export interface EcuTorquePoint {
+  readonly rpm: number;
+  /** The ECU's own calculated full-load torque, N·m, from every gear in the log. */
+  readonly before: Estimate;
+  readonly after: Estimate;
+}
+
+export interface EcuTorqueComparison {
+  readonly points: readonly EcuTorquePoint[];
+  readonly peakBefore: { readonly value: number; readonly rpm: number };
+  readonly peakAfter: { readonly value: number; readonly rpm: number };
+  /** Peak power the ECU's torque implies, P = T·ω, hp at the crank. */
+  readonly peakPowerBefore: { readonly value: number; readonly rpm: number };
+  readonly peakPowerAfter: { readonly value: number; readonly rpm: number };
+  /** Peak-to-peak change, N·m and hp. */
+  readonly torqueDelta: number;
+  readonly powerDelta: number;
+  /** Mean change the ECU reports over the compared rpm, N·m. */
+  readonly reportedChange: Estimate;
+  /** Mean change the car delivered over the same rpm, N·m, measured. */
+  readonly measuredChange: Estimate;
+  readonly agreement: 'confirmed' | 'notDelivered' | 'exceeds' | 'undetermined';
+  /**
+   * Measured stock power relative to the ECU's, minus one: +0.12 means the
+   * acceleration-based figure reads 12% high on the before-log. NaN when the two
+   * do not overlap in rpm.
+   */
+  readonly measuredOffset: number;
+  /** Whether the measured figures agree with the ECU closely enough to be more than a cross-check. */
+  readonly measuredReliable: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+export type HealthSystemId = 'turbo' | 'fuel' | 'combustion' | 'thermal' | 'delivery';
+
+/** `unknown` means the log does not carry what the system is judged on. */
+export type HealthStatus = 'good' | 'watch' | 'concern' | 'unknown';
+
+export interface HealthMetric {
+  /** i18n key of the label. */
+  readonly key: string;
+  readonly value: number;
+  readonly unit: string;
+  readonly status: HealthStatus;
+  /** The threshold the status was judged against, where there is one. */
+  readonly limit?: number;
+}
+
+export interface HealthSystem {
+  readonly id: HealthSystemId;
+  /** On the "after" log — the car as it now is. */
+  readonly status: HealthStatus;
+  /** The same system on the "before" log, to show what the tune changed. */
+  readonly statusBefore: HealthStatus;
+  readonly metrics: readonly HealthMetric[];
+  /** Detector findings that bear on this system, on the "after" log. */
+  readonly findings: readonly FindingKind[];
+}
+
+export interface HealthReport {
+  readonly systems: readonly HealthSystem[];
+  /** 0–100 over the systems the log could judge; NaN when it could judge none. */
+  readonly score: number;
+  readonly scoreBefore: number;
+  readonly label: 'healthy' | 'watch' | 'attention' | 'unknown';
+}
+
+// ---------------------------------------------------------------------------
+// Correction table
+// ---------------------------------------------------------------------------
+
+export type CorrectionParameter = 'ignition' | 'fuel' | 'boost' | 'hardware';
+
+/**
+ * One suggested change to one cell of the tuner's map.
+ *
+ * Every entry moves toward safety — less timing, more fuel, less boost — and
+ * never toward power. A log can prove that a cell was harmful; it cannot prove
+ * that a cell has headroom, so a suggestion to add timing would be a guess
+ * presented as a measurement.
+ */
+export interface CorrectionCell {
+  readonly rpmLow: number;
+  readonly rpmHigh: number;
+  /** Manifold pressure band, kPa absolute. NaN when the log carried no MAP. */
+  readonly loadLowKpa: number;
+  readonly loadHighKpa: number;
+  readonly parameter: CorrectionParameter;
+  /** Signed change in `unit`; NaN for hardware entries, which have no map value. */
+  readonly change: number;
+  readonly unit: 'deg' | 'percent' | 'kPa' | null;
+  /** What caused it: a finding kind, or 'boostShortfall' from the tracking analysis. */
+  readonly cause: FindingKind | 'boostShortfall';
+  /** The worst value observed in the cell, and what it was compared against. */
+  readonly observed: number;
+  readonly reference: number;
+  readonly evidencePoints: number;
+  readonly pulls: readonly number[];
+  readonly confidence: number;
+}
+
+// ---------------------------------------------------------------------------
+// Safety margins
+// ---------------------------------------------------------------------------
+
+export type MarginLimit = 'knock' | 'lean' | 'boostOvershoot' | 'fuelRailDroop' | 'egt';
+
+export type MarginStatus = 'ok' | 'tight' | 'exceeded' | 'unavailable';
+
+/**
+ * How close a zone came to a detector's threshold. The margin is the distance to
+ * the threshold as a fraction of the threshold: 0.10 means the worst value sat 10%
+ * short of the line, negative means it crossed it.
+ */
+export interface MarginCell {
+  readonly zone: Zone;
+  readonly limit: MarginLimit;
+  /** Across pulls; the interval says how much the margin itself varied. */
+  readonly margin: Estimate;
+  /** The single worst pull's margin — the one a tuner should plan against. */
+  readonly worstMargin: number;
+  readonly status: MarginStatus;
+}
+
+// ---------------------------------------------------------------------------
+// Logging advice
+// ---------------------------------------------------------------------------
+
+export interface LoggingAdvice {
+  /** i18n key describing what was missing and what that cost the analysis. */
+  readonly key: string;
+  readonly channel: ChannelId | null;
+  readonly session: 'before' | 'after' | 'both';
+  readonly severity: Severity;
+  readonly detail: Record<string, string | number>;
+}
+
+// ---------------------------------------------------------------------------
+// Gain across the band
+// ---------------------------------------------------------------------------
+
+/**
+ * A stretch of the rpm range over which the difference between sessions is
+ * proven positive, proven negative, or not proven either way.
+ */
+export interface GainBand {
+  readonly rpmLow: number;
+  readonly rpmHigh: number;
+  readonly kind: 'gain' | 'loss' | 'unproven';
+  readonly meanDelta: number;
+}
+
+// ---------------------------------------------------------------------------
 // Result
 // ---------------------------------------------------------------------------
 
@@ -238,6 +442,26 @@ export interface GainResult {
   readonly commonModeCancellation: number;
   readonly significant: boolean;
   readonly pValue: number;
+  /**
+   * Mean difference across the whole compared rpm range. A tune that adds 40 hp at
+   * the peak and loses 10 hp at 3000 rpm is a different tune from one that adds
+   * 25 hp everywhere, and a peak figure alone cannot tell them apart.
+   */
+  readonly averageDelta: Estimate;
+  readonly bands: readonly GainBand[];
+  /** Peak crank torque, N·m — what a tuner reads first. */
+  readonly peakTorqueBefore: Estimate;
+  readonly peakTorqueAfter: Estimate;
+  readonly torqueDelta: Estimate;
+  /** Where each peak sits on the rpm axis. */
+  readonly peakRpm: PeakRpm;
+}
+
+export interface PeakRpm {
+  readonly powerBefore: number;
+  readonly powerAfter: number;
+  readonly torqueBefore: number;
+  readonly torqueAfter: number;
 }
 
 export interface ProtocolViolation {
@@ -253,6 +477,17 @@ export interface AnalysisResult {
   readonly curve: readonly PowerCurvePoint[];
   readonly findings: readonly Finding[];
   readonly recommendations: readonly Recommendation[];
+  /** Requested vs delivered, per tracked quantity and session. */
+  readonly tracking: readonly TrackingSeries[];
+  /** ECU-reported torque against measured torque; null when not logged in both. */
+  readonly ecu: EcuTorqueComparison | null;
+  readonly health: HealthReport;
+  /** Suggested map changes for the after session, each toward safety. */
+  readonly corrections: readonly CorrectionCell[];
+  /** Distance to each detector threshold, per zone, in the after session. */
+  readonly margins: readonly MarginCell[];
+  /** What the next recording should include, and why. */
+  readonly loggingAdvice: readonly LoggingAdvice[];
   readonly validity: ValidityCard;
   readonly budget: readonly UncertaintyBudget[];
   readonly violations: readonly ProtocolViolation[];

@@ -19,8 +19,7 @@ export const sq: Record<TranslationKey, string> = {
   'app.tagline': 'Vendim, jo grafik.',
   'app.lead':
     'Krahaso dy sesione regjistrimi OBD-2 — para dhe pas riprogramimit — dhe merr një vlerësim të mbrojtshëm: sa u fitua, a u fitua në mënyrë të sigurt, dhe sa e sigurt është secila prej tyre.',
-  'app.privacy':
-    'Gjithçka ndodh brenda shfletuesit tënd. Regjistrimet nuk dalin kurrë nga kjo pajisje.',
+  'app.privacy': 'Gjithçka ndodh brenda shfletuesit tënd. Regjistrimet nuk dalin kurrë nga kjo pajisje.',
   'app.theme.toDark': 'Kalo në temën e errët',
   'app.theme.toLight': 'Kalo në temën e çelët',
   'app.language': 'Gjuha',
@@ -59,13 +58,11 @@ export const sq: Record<TranslationKey, string> = {
   'import.schema.title': 'Çfarë u njoh',
   'import.schema.recognised': 'Kanale të njohura',
   'import.schema.unrecognised': 'Të panjohura',
-  'import.schema.unrecognisedHint':
-    'Këto kolona nuk hynë në analizë. Asgjë nuk u hamendësua prej tyre.',
+  'import.schema.unrecognisedHint': 'Këto kolona nuk hynë në analizë. Asgjë nuk u hamendësua prej tyre.',
   'import.schema.derived': 'Të llogaritura nga kanale të tjera',
   'import.schema.assumed': 'Të supozuara',
   'import.schema.missingRecommended': 'Që mungojnë, dhe do të vlenin',
-  'import.schema.missingHint':
-    'Analiza funksionon edhe pa to, por çdo kanal që mungon heq një kategori gjetjesh.',
+  'import.schema.missingHint': 'Analiza funksionon edhe pa to, por çdo kanal që mungon heq një kategori gjetjesh.',
   'import.schema.dropped': '{count} mostra u hoqën si jashtë intervalit të mundshëm',
   'import.schema.derivedFrom': 'nga {channels}',
   'import.assumed.baroSeaLevel':
@@ -103,7 +100,7 @@ export const sq: Record<TranslationKey, string> = {
   'import.empty.protocol': 'Si duket një çift regjistrimesh i përdorshëm',
   'protocol.rule.pulls': '5 tërheqje me gaz të plotë për çdo sesion',
   'protocol.rule.gear': 'Marshi i tretë ose i katërt, i njëjti në të dy sesionet',
-  'protocol.rule.rpm': '2000 → 5500 rrot./min, një kalim i pandërprerë',
+  'protocol.rule.rpm': '2000 → 5500 rrot./min (naftë: 1500 → 4500), një kalim i pandërprerë',
   'protocol.rule.road': 'E njëjta rrugë, në të njëjtin drejtim',
   'protocol.rule.temp': 'Temperatura e ajrit hyrës brenda 3 °C mes sesioneve',
   'protocol.rule.fuel': 'Karburanti mbi gjysmë depozite',
@@ -118,11 +115,10 @@ export const sq: Record<TranslationKey, string> = {
     '{label} nuk ka kolonë të përdorshme kohe. Çdo rresht i duhet një vulë kohore, përndryshe mostrat nuk vendosen dot në një bazë të përbashkët kohe.',
   'import.error.sampleRate':
     '{label} u regjistrua në {rate} Hz. Nën {minimum} Hz kalimtaret që kërkon ky aplikacion nuk rikthehen dot, dhe interpolimi deri në 10 Hz do t’i shpikte ato.',
-  'import.error.missingRequired':
-    '{label} i mungon një kanal pa të cilin analiza nuk funksionon: {channels}.',
+  'import.error.missingRequired': '{label} i mungon një kanal pa të cilin analiza nuk funksionon: {channels}.',
   'import.error.read': 'Skedari nuk mund të lexohej.',
   'analysis.error.tooFewPulls':
-    'U gjetën vetëm {found} tërheqje të përdorshme në {session}, ndërsa minimumi është {minimum}. {rejected} tërheqje kandidate u refuzuan. Me më pak se tri tërheqje nuk ka çfarë të rikampionohet dhe qëndrueshmëria nuk përcaktohet — dhe një interval i gjerë prapë lexohet si përgjigje.',
+    'Nuk u gjet asnjë tërheqje e përdorshme me gaz të plotë në {session}. {rejected} pjesë kandidate u refuzuan — shumë të shkurtra, me ndërrim marshi, ose me rrotullime që bien. Regjistro të paktën një tërheqje me gaz të plotë në një marsh, për 500 rrot./min ose më shumë.',
 
   // --- channels ----------------------------------------------------------
   'channel.time': 'Koha',
@@ -174,8 +170,6 @@ export const sq: Record<TranslationKey, string> = {
   'protocol.none': 'Të dy sesionet e ndjekin protokollin e matjes.',
   'protocol.lead':
     'Një krahasim mes kushtesh të papërputhura është mënyra më e mundshme për të marrë një përgjigje të gabuar me bindje, prandaj kushtet kontrollohen para se të lexohet vendimi.',
-  'protocol.tooFewPulls':
-    '{session}: {found} tërheqje të përdorshme, duhen {minimum}, protokolli kërkon {expected}. {rejected} kandidate u refuzuan.',
   'protocol.fewerPullsThanProtocol':
     '{session}: {found} tërheqje të përdorshme, ndërsa protokolli kërkon {expected}. Intervali do të dalë më i gjerë se ç’duhet.',
   'protocol.lowSampleRate':
@@ -190,8 +184,7 @@ export const sq: Record<TranslationKey, string> = {
     '{session}: {pulls} nga {total} tërheqje kërkuan korrigjim atmosferik jashtë brezit që SAE J1349 e shpall të vlefshëm. Kushtet ishin shumë të largëta për t’u pajtuar vetëm me korrigjim.',
   'protocol.rpmCoverageHigh':
     '{session} arriti vetëm {reached} rrot./min, nën {expected}. Nuk pohohet asgjë mbi rrotullimet që tërheqjet arritën vërtet.',
-  'protocol.rpmCoverageLow':
-    '{session} filloi në {started} rrot./min, mbi {expected} që kërkon protokolli.',
+  'protocol.rpmCoverageLow': '{session} filloi në {started} rrot./min, mbi {expected} që kërkon protokolli.',
   'protocol.gearMismatch':
     'Dy sesionet u vozitën në marshe të ndryshme ({before} dhe {after}). Kjo është mënyra më e mundshme për të marrë një përgjigje të gabuar me bindje, dhe krahasimit nuk duhet t’i besohet.',
   'protocol.iatMismatch':
@@ -235,8 +228,7 @@ export const sq: Record<TranslationKey, string> = {
   'result.validity.index': 'Indeksi',
   'result.validity.gainHint': 'Zero nëse fitimi nuk është më i madh se zhurma.',
   'result.validity.consistencyHint': 'Sa afër janë mes tyre tërheqjet e sesionit të pasëm.',
-  'result.validity.safetyHint':
-    'Një, minus atë që heq çdo gjetje, e peshuar sipas besueshmërisë së saj.',
+  'result.validity.safetyHint': 'Një, minus atë që heq çdo gjetje, e peshuar sipas besueshmërisë së saj.',
 
   // --- result: chart -----------------------------------------------------
   'result.chart.title': 'Fuqia sipas rrotullimeve të motorit',
@@ -318,8 +310,7 @@ export const sq: Record<TranslationKey, string> = {
   'confidence.uncalibratedDetector': 'Ky detektor është jashtë grupit të kalibruar',
   'confidence.lowSampleRate': 'Regjistrimi është më i ngadaltë se 10 Hz',
   'confidence.outOfBandCorrection': 'Korrigjimi atmosferik doli jashtë brezit të vlefshëm',
-  'confidence.wilsonCap':
-    'E kufizuar: dhjetë përgjigje të sakta nga dhjetë provojnë saktësi mbi 0.72, jo mbi 1.00',
+  'confidence.wilsonCap': 'E kufizuar: dhjetë përgjigje të sakta nga dhjetë provojnë saktësi mbi 0.72, jo mbi 1.00',
 
   // --- result: uncertainty ----------------------------------------------
   'result.uncertainty.title': 'Nga vjen pasiguria',
@@ -371,6 +362,237 @@ export const sq: Record<TranslationKey, string> = {
   'result.pairing.pair': 'para #{before} ↔ pas #{after}',
   'result.pairing.distance': 'distanca {distance}',
 
+  // --- result: gain across the band --------------------------------------
+  'result.bands.title': 'Përgjatë intervalit të rrotullimeve',
+  'result.bands.average': 'Ndryshimi mesatar përgjatë intervalit të krahasuar',
+  'result.bands.kind.gain': 'fitim',
+  'result.bands.kind.loss': 'humbje',
+  'result.bands.kind.unproven': 'i paprovuar',
+  'result.bands.band': '{low}–{high} rrot./min',
+  'result.bands.mean': '{delta} {unit} mesatarisht',
+  'result.bands.lossWarning':
+    'Riprogramimi humbet fuqi diku në interval. Shifra maksimale e fsheh këtë — kontrollo nëse është aty ku automjeti vozitet realisht.',
+
+  // --- result: requested vs delivered -------------------------------------
+  'result.tracking.title': 'E kërkuara kundrejt të dhënës',
+  'result.tracking.lead':
+    'Çfarë kërkoi ECU-ja kundrejt asaj që dha motori. Një vlerë vetë nuk është as e mirë as e keqe; një vlerë nën kërkesën e saj tregon saktësisht ku nuk përputhen riprogramimi dhe pajisjet.',
+  'result.tracking.none':
+    'Asnjë regjistrim nuk kishte kanal synimi (presion i synuar, λ e synuar, presion i synuar i rampës, ose kthim nga trokitja me paraprirjen), prandaj nuk ka çfarë të krahasohet. Shih "Çfarë të regjistrosh herën tjetër".',
+  'result.tracking.requested': 'E kërkuara (me vija-vija)',
+  'result.tracking.delivered': 'E dhëna',
+  'result.tracking.band': 'Shpërndarja mes tërheqjeve',
+  'result.tracking.quantity.boost': 'Presioni i mbushjes',
+  'result.tracking.quantity.lambda': 'Lambda',
+  'result.tracking.quantity.fuelRail': 'Presioni i rampës së karburantit',
+  'result.tracking.quantity.timing': 'Paraprirja e ndezjes',
+  'result.tracking.hint.boost':
+    'Nën kërkesë pasi turbina është mbushur do të thotë se turbina nuk e arrin dot synimin.',
+  'result.tracking.hint.lambda': 'Mbi kërkesë do të thotë më e varfër se ç’kërkoi harta.',
+  'result.tracking.hint.fuelRail': 'Nën kërkesë do të thotë se pompa nuk e mban dot presionin e kërkuar.',
+  'result.tracking.hint.timing': 'Nën kërkesë do të thotë se kontrolli i trokitjes hoqi paraprirje.',
+  'result.tracking.reconstructed':
+    'Kërkesa rindërtohet si paraprirja e regjistruar plus kthimi nga trokitja: asnjë burim OBD-2 nuk e regjistron drejtpërdrejt paraprirjen para kthimit.',
+  'result.tracking.status.onTarget': 'në synim',
+  'result.tracking.status.short': 'nën kërkesë',
+  'result.tracking.status.over': 'mbi kërkesë',
+  'result.tracking.status.spooling': 'turbina po mbushet',
+  'result.tracking.status.insufficient': 'shumë pak tërheqje',
+  'result.tracking.description':
+    '{quantity} në sesionin {session}: vlera e kërkuar si vijë me vija-vija dhe vlera e dhënë si vijë e plotë, sipas rrotullimeve të motorit.',
+
+  // --- result: correction table -------------------------------------------
+  'result.corrections.title': 'Ndryshime të sugjeruara në hartë',
+  'result.corrections.lead':
+    'Çdo ndryshim përmasohet nga ajo që tregoi ky regjistrim në atë qelizë të hartës. Secili shkon drejt sigurisë — më pak paraprirje, më shumë karburant, më pak presion — dhe asnjë drejt fuqisë: një regjistrim mund të provojë se një qelizë bëri dëm, jo se ka hapësirë.',
+  'result.corrections.caveat':
+    'Pikënisje për sesionin e ardhshëm, jo vlera përfundimtare. Bëj një ndryshim në një kohë, regjistro sërish dhe krahasoji dy sesionet këtu.',
+  'result.corrections.none': 'Asgjë në këtë regjistrim nuk kërkon ndryshim në hartë.',
+  'result.corrections.table': 'Tabela',
+  'result.corrections.rpm': 'rrot./min',
+  'result.corrections.load': 'Presioni në kolektor',
+  'result.corrections.change': 'Ndryshimi',
+  'result.corrections.why': 'Sepse',
+  'result.corrections.evidence': 'Dëshmia',
+  'result.corrections.confidence': 'Besueshmëria',
+  'result.corrections.anyLoad': 'çdo',
+  'result.corrections.evidenceText': '{points} pika · tërheqjet {pulls}',
+  'result.corrections.hardwareChange': 'pajisje',
+  'result.corrections.parameter.ignition': 'Paraprirja e ndezjes',
+  'result.corrections.parameter.fuel': 'Karburanti',
+  'result.corrections.parameter.boost': 'Presioni i synuar',
+  'result.corrections.parameter.hardware': 'Sistemi i karburantit',
+  'result.corrections.cause.knock': 'kthim nga trokitja deri në {observed}°',
+  'result.corrections.cause.lean': 'λ arriti {observed}; synohet {reference}',
+  'result.corrections.cause.boostOvershoot': 'mbipresion deri në {observed}% mbi synim',
+  'result.corrections.cause.boostShortfall':
+    '{observed} kPa nën një synim prej {reference} kPa pasi turbina është mbushur',
+  'result.corrections.cause.fuelRailDroop':
+    'presioni i rampës deri në {observed}% nën referencë — kontrollo pompën, filtrin dhe kapacitetin e injektorëve',
+
+  // --- result: margins -----------------------------------------------------
+  'result.margins.title': 'Distanca nga çdo kufi',
+  'result.margins.lead':
+    'Sa afër iu afrua çdo zonë e sesionit të pasëm çdo pragu të detektorëve. "Pa gjetje" dhe "pa marzh" janë pohime të ndryshme, dhe i dyti është ai për të vepruar para se të bëhet i pari.',
+  'result.margins.explain':
+    'Distanca nga pragu si përqindje e pragut, për tërheqjen më të keqe. Negative do të thotë se u kalua.',
+  'result.margins.limit.knock': 'Trokitja',
+  'result.margins.limit.lean': 'Përzierje e varfër',
+  'result.margins.limit.boostOvershoot': 'Mbipresion',
+  'result.margins.limit.fuelRailDroop': 'Rënia e presionit në rampë',
+  'result.margins.limit.egt': 'Temperatura e shkarkimit',
+  'result.margins.status.ok': 'mirë',
+  'result.margins.status.tight': 'ngushtë',
+  'result.margins.status.exceeded': 'kaluar',
+  'result.margins.status.unavailable': 'pa regjistrim',
+  'result.margins.cell': '{limit}, {zone}: tërheqja më e keqe {worst}%, mesatarja {mean}%, {status}',
+
+  // --- result: logging advice ---------------------------------------------
+  'result.logging.title': 'Çfarë të regjistrosh herën tjetër',
+  'result.logging.lead':
+    'Çdo kanal që mungonte hoqi një kategori gjetjesh nga kjo analizë. Mungesa e një gjetjeje nuk është mungesë e një problemi.',
+  'result.logging.none': 'Të dy regjistrimet kishin gjithçka që përdor kjo analizë.',
+  'result.logging.both': 'Të dy sesionet',
+  'logging.knockRetard':
+    'Regjistro kthimin nga trokitja. Pa të trokitja nuk vlerësohet fare — gjetja më e rëndësishme e sigurisë thjesht mungon.',
+  'logging.lambda':
+    'Regjistro një kanal λ me brez të gjerë ose AFR. Pa të një përzierje e varfër nën ngarkesë nuk zbulohet dot.',
+  'logging.iat':
+    'Regjistro temperaturën e ajrit hyrës. Pa të korrigjimi atmosferik supozon 20 °C dhe ngrohja e tepërt nuk shihet.',
+  'logging.baro':
+    'Regjistro presionin barometrik. U supozua niveli i detit, gjë që e zhvendos korrigjimin afërsisht 1% për çdo 100 m lartësi.',
+  'logging.boostTarget':
+    'Regjistro presionin e synuar. Mbipresioni u mat kundrejt pllajës së stabilizuar dhe krahasimi i kërkuar-dhënë për presionin mungon.',
+  'logging.boost': 'Regjistro presionin e mbushjes ose të kolektorit. Sjellja e presionit nuk u vlerësua dot.',
+  'logging.lambdaTarget':
+    'Regjistro λ e synuar. Pa të sugjerimet për karburantin synojnë një λ 0.85 të përgjithshme e jo atë që kërkon harta.',
+  'logging.fuelRail':
+    'Regjistro presionin e rampës së karburantit. Pa të nuk shihet një sistem karburanti që mbaron kapacitetin në rrotullime të larta.',
+  'logging.fuelRailTarget': 'Regjistro presionin e synuar të rampës. Rënia u mat kundrejt fillimit të çdo tërheqjeje.',
+  'logging.timing': 'Regjistro paraprirjen e ndezjes. Pa të kërkesa e paraprirjes nuk rindërtohet dot.',
+  'logging.coolant':
+    'Regjistro temperaturën e lëngut ftohës, që të kontrollohet nëse motori ishte në temperaturë pune.',
+  'logging.gear':
+    'Regjistro marshin nëse programi e ofron. Marshet u rikuperuan nga rrotullimet kundrejt shpejtësisë, gjë që jep vetëm etiketë relative.',
+  'logging.sampleRate':
+    'Regjistro më shpejt: u regjistrua {rate} Hz, synimi është {target} Hz. Shumica e programeve regjistrojnë më shpejt kur zgjidhen më pak kanale njëherësh.',
+
+  // --- AI explanation ----------------------------------------------------
+  'ai.title': 'Pyet për këtë rezultat',
+  'ai.badge': 'AI',
+  'ai.lead':
+    'Një model AI mund ta shpjegojë këtë rezultat me gjuhë të thjeshtë dhe t’u përgjigjet pyetjeve për të. Ai sheh vetëm përmbledhjen përfundimtare, kurrë skedarët e regjistrimit, dhe nuk mund të ndryshojë asnjë numër, gjetje apo vendimin.',
+  'ai.notVerdict': 'Shpjegim nga AI — nuk është pjesë e vendimit. Analiza e kalibruar më sipër është rezultati.',
+  'ai.privacy':
+    'Pyetja i dërgon shërbimit AI përmbledhjen e analizës — numrat, gjetjet, ndryshimet e sugjeruara, jo skedarët CSV.',
+
+  'ai.summary.title': 'Mesazhet kryesore',
+  'ai.summary.privacy':
+    'E shkruar nga një shërbim i jashtëm AI nga përmbledhja e analizës — numrat dhe gjetjet, jo skedarët CSV.',
+  'ai.summary.writing': 'Po shkruhet përmbledhja…',
+  'ai.summary.write': 'Shkruaj përmbledhjen',
+  'ai.summary.rewrite': 'Shkruaje sërish',
+  'ai.summary.otherLanguage': 'E shkruar në gjuhën tjetër — shkruaje sërish për ta ndërruar.',
+  'ai.question': 'Pyetja jote',
+  'ai.placeholder': 'p.sh. Cilin ndryshim duhet ta bëj i pari, dhe pse?',
+  'ai.suggest.explain': 'Shpjegoje këtë rezultat thjesht',
+  'ai.suggest.first': 'Cilin ndryshim ta bëj të parin?',
+  'ai.suggest.confidence': 'Pse besueshmëria nuk është më e lartë?',
+  'ai.ask': 'Pyet',
+  'ai.asking': 'Po përgjigjet…',
+  'ai.stop': 'Ndalo',
+  'ai.clear': 'Pastro bisedën',
+  'ai.you': 'Ti',
+  'ai.model': 'AI',
+  'ai.error.rate': 'U arrit kufiri i kërkesave — prit pak dhe provo sërish.',
+  'ai.error.network': 'Shërbimi AI nuk u arrit. Kontrollo lidhjen.',
+  'ai.error.refused': 'Modeli nuk pranoi t’i përgjigjet kësaj pyetjeje.',
+  'ai.error.generic': 'Kërkesa dështoi. Provo sërish pas pak.',
+  'ai.error.unavailable': 'Asistenti AI nuk është i disponueshëm tani.',
+
+  // --- dashboard ---------------------------------------------------------
+  'result.unit': 'Njësia e fuqisë',
+  'chart.title': 'Momenti rrotullues dhe fuqia',
+  'chart.torque': 'Momenti',
+  'chart.power': 'Fuqia',
+  'chart.bands': 'Intervalet 95%',
+  'chart.gain': 'Fitimi',
+  'chart.hint': 'kalo miun ose përdor shigjetat për të lexuar çdo rrotullim',
+  'chart.description':
+    'Momenti rrotullues dhe fuqia sipas rrotullimeve të motorit. Momenti në boshtin e majtë në Nm, fuqia në boshtin e djathtë në {unit}. Para riprogramimit me vija-vija; pas me vija të plota me intervalin 95%. Momenti maksimal nga {torqueBefore} në {torqueAfter} Nm, fuqia maksimale nga {powerBefore} në {powerAfter} {unit}.',
+  'headline.average': 'mesatarisht {value} {unit} përgjatë intervalit',
+  'headline.clean': 'Pa gjetje',
+  'headline.risks': 'Rreziqe: {count}',
+  'headline.cautions': 'Kujdes: {count}',
+  'headline.changes': 'Ndryshime në hartë: {count}',
+  'headline.warnings': 'Paralajmërime: {count}',
+  'keypoints.title': 'Pikat kryesore',
+  'keypoints.clean':
+    'Rezultat i pastër: pa gjetje sigurie, asgjë për të ndryshuar në hartë, motori jep atë që kërkon ECU-ja, dhe matja ndoqi protokollin.',
+  'keypoints.more': '+{count} të tjera',
+  'keypoints.open': 'Hap',
+  'keypoints.measurement': 'Matja',
+  'keypoints.protocol': 'Krahasimi mund të mos jetë i vlefshëm: {count} probleme protokolli',
+  'keypoints.warnings': 'Paralajmërime protokolli: {count}',
+  'keypoints.safety': 'Siguria',
+  'keypoints.changes': 'Ndrysho në hartë',
+  'keypoints.tracking': 'Nuk jepet',
+  'keypoints.short': '{quantity} nën kërkesë në {low}–{high} rrot./min ({error})',
+  'keypoints.over': '{quantity} mbi kërkesë në {low}–{high} rrot./min ({error})',
+  'keypoints.band': 'Brezi i fuqisë',
+  'keypoints.loss': 'Humbet {delta} {unit} në {low}–{high} rrot./min',
+  'keypoints.tight': 'Zona brenda 5% nga një kufi: {count}',
+  'tabs.label': 'Detajet',
+  'tabs.changes': 'Ndryshimet në hartë',
+  'tabs.findings': 'Gjetjet',
+  'tabs.tracking': 'E kërkuara kundrejt të dhënës',
+  'tabs.limits': 'Kufijtë',
+  'tabs.band': 'Përgjatë rrotullimeve',
+  'tabs.uncertainty': 'Vlefshmëria dhe pasiguria',
+  'tabs.sessions': 'Sesionet dhe tërheqjet',
+  'tabs.protocol': 'Protokolli dhe regjistrimi',
+  'tabs.ask': 'Pyet AI',
+  'import.vehicle.advanced': 'Parametrat e avancuar të automjetit',
+  'import.vehicle.massShortHint': 'Peshoje automjetin: masa është burimi më i madh i pasigurisë.',
+  'import.schema.summary': 'Kanalet: {recognised} të njohura · {missing} që do të vlenin · {unrecognised} të panjohura',
+
+  // --- Autotuner / ECU logs ----------------------------------------------
+  'channel.ecuTorque': 'Momenti sipas ECU-së',
+  'import.assumed.absoluteBoost':
+    'Kolona e presionit të mbushjes përmban presion absolut (afër presionit të ambientit në ngarkesë të pjesshme), siç e regjistrojnë programet me bazë Bosch si Autotuner. U lexua si presion në kolektor dhe u shndërrua në presion mbushjeje duke zbritur presionin barometrik.',
+  'segment.rejected.otherGear': 'marsh tjetër nga ai që ndajnë të dy sesionet',
+  'protocol.assumedScatter':
+    '{session}: {found} tërheqje të përdorshme, ndërsa duhen {needed} për të matur shpërndarjen mes tërheqjeve. Intervali dhe testi i rëndësisë supozojnë një shpërndarje prej {cv}%. Regjistro më shumë tërheqje në të njëjtin marsh për një përgjigje të matur.',
+  'protocol.lambdaLooksDiesel':
+    'Nën ngarkesë të plotë λ është rreth {lambda}, që është motor me naftë, jo me benzinë. Kontrollo zgjedhjen e karburantit: ajo përcakton si shndërrohet AFR dhe nëse bëhet kontrolli i përzierjes së varfër.',
+  'chart.source.label': 'Burimi i momentit',
+  'chart.source.measured': 'Nga përshpejtimi',
+  'chart.source.ecu': 'Regjistrimi i ECU-së',
+  'chart.ecuNote':
+    'Regjistrimi i ECU-së: momenti në ngarkesë të plotë që llogarit vetë kompjuteri i motorit, nga çdo mostër e qëndrueshme në ngarkesë të plotë, në çdo marsh të regjistrimit. Fuqia është moment × rrotullime, në bosht — shifra që japin prodhuesi dhe shikuesit e hartave.',
+  'chart.measuredNote':
+    'Nga përshpejtimi: fuqia e llogaritur nga sa shpejt fitoi shpejtësi automjeti, me masën dhe rezistencën që futët. Kështu krahasohet vetëm marshi që ndajnë të dy regjistrimet, dhe një pjerrësi ose masë e gabuar e zhvendos.',
+  'keypoints.ecu': 'Kontroll i kryqëzuar nga përshpejtimi',
+  'keypoints.ecuModelOff':
+    'Në regjistrimin origjinal, fuqia nga përshpejtimi del {offset}% kundrejt ECU-së. Masa, rezistenca ose pjerrësia e rrugës nuk përputhen me këtë regjistrim, prandaj shifrat nga përshpejtimi janë vetëm kontroll.',
+  'headline.ecuVerdict': 'Fitimi · nga regjistrimi i ECU-së',
+  'headline.ecuBasis': 'Momenti i ECU-së në ngarkesë të plotë, të gjitha marshet · {count} pika rrotullimesh',
+  'headline.ecuAverage': 'mesatarisht {value} Nm në gjithë diapazonin',
+  'headline.measuredCrossCheck': 'nga përshpejtimi (origjinal): {value} {unit}',
+  'headline.crossCheck.confirmed': 'Përshpejtimi e konfirmon: {measured} Nm',
+  'headline.crossCheck.notDelivered': 'Përshpejtimi nuk ndryshoi: {measured} Nm',
+  'headline.crossCheck.exceeds': 'Përshpejtimi tregon më shumë: {measured} Nm',
+  'headline.crossCheck.undetermined': 'Pa kontroll nga përshpejtimi në rrotullimet e përbashkëta',
+  'keypoints.ecuNotDelivered':
+    'ECU raporton {reported} Nm më shumë, por përshpejtimi i automjetit në regjistrim nuk ndryshoi përkatësisht ({measured} Nm). Kontrolloni që regjistrimi “pas” të jetë një vozitje e vërtetë dhe jo regjistrimi “para” me vlera të ndryshuara.',
+  'keypoints.ecuExceeds':
+    'Automjeti dha {measured} Nm, më shumë se {reported} Nm që raporton ECU: modeli i momentit nuk u përditësua me riprogramimin.',
+  'keypoints.ecuConfirmed':
+    'Ndryshimi që raporton ECU ({reported} Nm) përputhet me atë që dha automjeti ({measured} Nm).',
+  'report.section.ecu': 'Momenti sipas ECU-së kundrejt atij të matur',
+  'report.ecu.reported': 'Ndryshimi që raporton ECU',
+  'report.ecu.measured': 'Ndryshimi që dha automjeti (i matur)',
+
   // --- export ------------------------------------------------------------
   'result.export': 'Eksporto raportin (PDF)',
   'result.exporting': 'Po përgatitet…',
@@ -384,6 +606,12 @@ export const sq: Record<TranslationKey, string> = {
   'report.section.sessions': 'Sesionet',
   'report.section.uncertainty': 'Pasiguria',
   'report.section.protocol': 'Protokolli',
+  'report.section.bands': 'Përgjatë intervalit të rrotullimeve',
+  'report.section.tracking': 'E kërkuara kundrejt të dhënës',
+  'report.section.corrections': 'Ndryshime të sugjeruara në hartë',
+  'report.section.margins': 'Distanca nga çdo kufi',
+  'report.section.logging': 'Çfarë të regjistrosh herën tjetër',
+  'report.section.aiSummary': 'Mesazhet kryesore (AI — nuk janë pjesë e vendimit)',
   'report.footer':
     'Llogaritur në shfletues nga dy regjistrime OBD-2. Pa të dhëna shembull, pa server, pa model gjuhësor në rrjedhën e përpunimit.',
 
@@ -400,4 +628,49 @@ export const sq: Record<TranslationKey, string> = {
   'unit.lambda': 'λ',
   'unit.seconds': 's',
   'unit.sd': 'σ',
+  'health.title': 'Kontrolli i gjendjes së makinës',
+  'health.lead': 'Çfarë thonë regjistrimet për gjendjen e makinës, sistem për sistem. Çdo status vjen nga rregulla të fiksuara mbi vlerat e matura; mekaniku AI i shpjegon ato.',
+  'health.score': 'Pikët e gjendjes',
+  'health.scoreStock': 'regjistrimi origjinal: {score}',
+  'health.label.healthy': 'Në gjendje të mirë',
+  'health.label.watch': 'Duhet mbajtur nën vëzhgim',
+  'health.label.attention': 'Kërkon vëmendje',
+  'health.label.unknown': 'Të dhëna të pamjaftueshme',
+  'health.status.good': 'Mirë',
+  'health.status.watch': 'Vëzhgo',
+  'health.status.concern': 'Shqetësim',
+  'health.status.unknown': 'Pa regjistrim',
+  'health.stock': 'Origjinal: {status}',
+  'health.limit': 'kufiri {value}',
+  'health.notLogged': 'Ky regjistrim nuk përmban atë mbi të cilin gjykohet ky sistem.',
+  'health.system.turbo': 'Turbo & presioni',
+  'health.system.fuel': 'Sistemi i karburantit',
+  'health.system.combustion': 'Djegia',
+  'health.system.thermal': 'Temperaturat',
+  'health.system.delivery': 'Dhënia e momentit',
+  'health.metric.boostPeak': 'Presioni maksimal i turbos',
+  'health.metric.boostTracking': 'Turbo kundrejt objektivit, zona më e keqe',
+  'health.metric.railPeak': 'Presioni maksimal në rampë',
+  'health.metric.railTracking': 'Rampa kundrejt objektivit, zona më e keqe',
+  'health.metric.injectorDuty': 'Ngarkesa e injektorëve, maks.',
+  'health.metric.lambdaMin': 'λ më e ulët nën ngarkesë',
+  'health.metric.lambdaTracking': 'λ kundrejt objektivit, zona më e keqe',
+  'health.metric.knockMax': 'Tërheqja e ndezjes nga detonacioni, maks.',
+  'health.metric.coolantMax': 'Ftohësi, maks.',
+  'health.metric.oilMax': 'Vaji, maks.',
+  'health.metric.egtMax': 'Gazrat e shkarkimit, maks.',
+  'health.metric.iatRise': 'Rritja e ajrit të thithjes gjatë seancës',
+  'health.metric.consistency': 'Ndryshimi nga tërheqja në tërheqje',
+  'health.metric.ecuDelivered': 'Ndryshimi i dhënë minus ai i raportuar nga ECU',
+  'health.ai.title': 'Mekaniku AI',
+  'health.ai.checks': 'Çfarë të kontrollohet në servis',
+  'health.ai.reading': 'Mekaniku AI po lexon regjistrimet…',
+  'health.ai.ask': 'Pyet mekanikun AI',
+  'health.ai.again': 'Pyet përsëri',
+  'health.ai.unreadable': 'Përgjigja e AI nuk u lexua dot. Pyet përsëri.',
+  'health.ai.note': 'Shënimet e AI shpjegojnë statuset; nuk i vendosin ato.',
+  'logging.egt':
+    'Regjistro temperaturën e gazrave të shkarkimit. Në naftë është kufiri i parë që prek një riprogramim, dhe pa të nuk gjykohet dot rezerva termike.',
+  'logging.lambdaTargetDiesel':
+    'Regjistro një kanal λ ose AFR. Në naftë ai tregon sa afër kufirit të tymit punon sasia e injektuar.',
 };

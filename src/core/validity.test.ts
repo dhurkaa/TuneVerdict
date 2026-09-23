@@ -13,6 +13,12 @@ function gain(deltaPercent: number, significant: boolean): GainResult {
     commonModeCancellation: 3,
     significant,
     pValue: significant ? 0.01 : 0.4,
+    averageDelta: estimate(200 * (deltaPercent / 100)),
+    bands: [],
+    peakTorqueBefore: estimate(350),
+    peakTorqueAfter: estimate(350 * (1 + deltaPercent / 100)),
+    torqueDelta: estimate(350 * (deltaPercent / 100)),
+    peakRpm: { powerBefore: 5000, powerAfter: 5000, torqueBefore: 3000, torqueAfter: 3000 },
   };
 }
 

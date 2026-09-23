@@ -52,10 +52,48 @@ describe('end-to-end: segmentation', () => {
     expect(result.before.gear).toBeGreaterThan(0);
   });
 
-  it('refuses to analyse a session with too few usable pulls', () => {
-    // A wide interval still reads as an answer, so the analysis is refused rather
-    // than reported with one.
-    expect(() => run({ pulls: 2 }, { pulls: 5 })).toThrow(AnalysisError);
+  it('refuses to analyse a session with no usable pull at all', () => {
+    // A log of part-throttle cruising contains nothing to measure power from.
+    const csv = generateCsv({ seed: 101 });
+    const lines = csv.split('\n');
+    const throttleColumn = (lines[0] as string).split(',').findIndex((h) => h.startsWith('Throttle'));
+    const cruise = lines
+      .map((line, i) => {
+        if (i === 0) return line;
+        const cells = line.split(',');
+        cells[throttleColumn] = '30.00';
+        return cells.join(',');
+      })
+      .join('\n');
+    const before = importCsv(cruise, 'cruise.csv');
+    const after = importCsv(generateCsv({ seed: 202 }), 'after.csv');
+    expect(() => analyse(before.session, after.session, VEHICLE, { monteCarloDraws: 200 })).toThrow(AnalysisError);
+  });
+
+  it('analyses a session with fewer pulls than the statistics need, and says the scatter was assumed', () => {
+    const result = run({ pulls: 2 }, { pulls: 5 });
+    expect(result.before.acceptedPulls).toBe(2);
+    expect(result.violations.some((v) => v.key === 'protocol.assumedScatter')).toBe(true);
+  });
+});
+
+describe('end-to-end: single-pull logs', () => {
+  it('proves a real gain from one pull per session, using the assumed scatter', () => {
+    const result = run({ pulls: 1, peakHp: 220 }, { pulls: 1, peakHp: 260 });
+    expect(result.gain.significant).toBe(true);
+    expect(result.gain.delta.lo).toBeGreaterThan(0);
+  });
+
+  it('does not call a small single-pull difference proven', () => {
+    // One pull against one pull cannot resolve 2%: the assumed 3% scatter says so.
+    const result = run({ pulls: 1, peakHp: 250 }, { pulls: 1, peakHp: 255 });
+    expect(result.gain.significant).toBe(false);
+  });
+
+  it('widens the interval beyond what the parameters alone would give', () => {
+    const single = run({ pulls: 1, peakHp: 220 }, { pulls: 1, peakHp: 260 });
+    const many = run({ pulls: 5, peakHp: 220 }, { pulls: 5, peakHp: 260 });
+    expect(single.gain.delta.sd).toBeGreaterThan(many.gain.delta.sd);
   });
 });
 
@@ -124,6 +162,42 @@ describe('end-to-end: power estimation', () => {
     const guessed = runWith({ ...VEHICLE, massWeighed: false });
     const weighed = runWith({ ...VEHICLE, massWeighed: true });
     expect(weighed.after.peakPower.sd).toBeLessThan(guessed.after.peakPower.sd);
+  });
+});
+
+describe('end-to-end: torque', () => {
+  it('recovers the true peak torque and where it sits', () => {
+    const options = { ...DEFAULT_SYNTHETIC };
+    const factor = correctionFactor('SAE J1349', options.baroKpa, options.iatC).factor;
+    // True torque curve of the synthetic engine, T = P / ω, over the compared range.
+    let trueTorque = 0;
+    let trueRpm = 0;
+    for (let rpm = 2400; rpm <= 5300; rpm += 10) {
+      const x = rpm <= options.rpmPeak ? (rpm - options.rpmPeak) / (options.rpmPeak - options.rpmStart) : (rpm - options.rpmPeak) / (options.rpmEnd - options.rpmPeak);
+      const drop = rpm <= options.rpmPeak ? options.lowEndDrop : 0.08;
+      const hp = options.peakHp * (1 - drop * x * x) * factor;
+      const torque = (hp * 745.699872 * 60) / (2 * Math.PI * rpm);
+      if (torque > trueTorque) {
+        trueTorque = torque;
+        trueRpm = rpm;
+      }
+    }
+    const result = run();
+    expect(result.gain.peakTorqueAfter.value).toBeGreaterThan(trueTorque * 0.94);
+    expect(result.gain.peakTorqueAfter.value).toBeLessThan(trueTorque * 1.06);
+    expect(Math.abs(result.gain.peakRpm.torqueAfter - trueRpm)).toBeLessThanOrEqual(400);
+    expect(result.gain.peakTorqueAfter.lo).toBeLessThan(result.gain.peakTorqueAfter.value);
+  });
+
+  it('puts the torque peak below the power peak, as on every real engine', () => {
+    const result = run();
+    expect(result.gain.peakRpm.torqueAfter).toBeLessThan(result.gain.peakRpm.powerAfter);
+  });
+
+  it('measures a torque gain alongside the power gain', () => {
+    const result = run({ peakHp: 220 }, { peakHp: 260 });
+    expect(result.gain.torqueDelta.value).toBeGreaterThan(0);
+    expect(result.gain.torqueDelta.lo).toBeGreaterThan(0);
   });
 });
 

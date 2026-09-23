@@ -45,6 +45,7 @@ export const CHANNEL_IDS = [
   'fuelLevel',
   'battery',
   'injectorDuty',
+  'ecuTorque',
 ] as const;
 
 export type ChannelId = (typeof CHANNEL_IDS)[number];
@@ -196,6 +197,9 @@ export const CHANNELS: readonly ChannelSpec[] = [
       ['accelerator pedal position e', 'percent'],
       ['accelerator pedal position f', 'percent'],
       ['pedal position', 'percent'],
+      ['gaspedal position', 'percent'],
+      ['accelerator pedal', 'percent'],
+      ['accelerator position', 'percent'],
       ['accel pedal', 'percent'],
       ['app', 'percent'],
       ['gas pedal', 'percent'],
@@ -259,6 +263,8 @@ export const CHANNELS: readonly ChannelSpec[] = [
       ['turbo boost and vacuum gauge', 'bar'],
       ['boost gauge', 'bar'],
       ['charge pressure', 'kPa'],
+      ['boost pressure actual', 'mbar'],
+      ['ladedruck ist', 'mbar'],
       ['boost psi', 'psi'],
       ['boost bar', 'bar'],
       ['boost kpa', 'kPa'],
@@ -280,6 +286,9 @@ export const CHANNELS: readonly ChannelSpec[] = [
       ['commanded boost', 'kPa'],
       ['desired boost', 'bar'],
       ['boost setpoint', 'bar'],
+      ['boost pressure setpoint', 'mbar'],
+      ['boost pressure target', 'mbar'],
+      ['boost pressure specified', 'mbar'],
       ['boost target psi', 'psi'],
       ['ladedruck soll', 'bar'],
       ['solladedruck', 'bar'],
@@ -382,6 +391,8 @@ export const CHANNELS: readonly ChannelSpec[] = [
       ['egt', 'C'],
       ['exhaust gas temperature', 'C'],
       ['exhaust temperature', 'C'],
+      ['exhaust gas temperature before turbocharger', 'C'],
+      ['exhaust gas temperature before turbine', 'C'],
       ['egt1', 'C'],
       ['egt bank 1', 'C'],
       ['egt bank 1 sensor 1', 'C'],
@@ -394,10 +405,15 @@ export const CHANNELS: readonly ChannelSpec[] = [
     id: 'lambda',
     canonicalUnit: 'lambda',
     requirement: 'recommended',
-    plausible: [0.5, 1.6],
+    // A diesel at part load runs λ 1.5–5, so the upper bound is wide; overrun
+    // readings (λ 20–30, no fuel injected) are dropped as meaningless.
+    plausible: [0.5, 10],
     aliases: [
       ['lambda', 'lambda'],
       ['lambda value', 'lambda'],
+      ['lambda afr', 'lambda'],
+      ['lambda actual', 'lambda'],
+      ['lambda sensor', 'lambda'],
       ['commanded equivalence ratio', 'lambda'],
       ['equivalence ratio', 'lambda'],
       ['o2 sensor wr lambda', 'lambda'],
@@ -506,7 +522,8 @@ export const CHANNELS: readonly ChannelSpec[] = [
     id: 'fuelRail',
     canonicalUnit: 'kPa',
     requirement: 'optional',
-    plausible: [100, 30000],
+    // Common-rail diesel runs 1600–2500 bar; petrol direct injection 50–350.
+    plausible: [100, 300000],
     aliases: [
       ['fuel rail pressure', 'kPa'],
       ['fuel rail pressure absolute', 'kPa'],
@@ -517,6 +534,9 @@ export const CHANNELS: readonly ChannelSpec[] = [
       ['rail pressure bar', 'bar'],
       ['fuel pressure psi', 'psi'],
       ['hpfp pressure', 'bar'],
+      ['fuel high pressure', 'bar'],
+      ['rail pressure actual', 'bar'],
+      ['fuel rail pressure actual', 'bar'],
       ['kraftstoffdruck', 'bar'],
       ['raildruck', 'bar'],
       ['kraftstoffraildruck', 'bar'],
@@ -526,12 +546,16 @@ export const CHANNELS: readonly ChannelSpec[] = [
     id: 'fuelRailTarget',
     canonicalUnit: 'kPa',
     requirement: 'optional',
-    plausible: [100, 30000],
+    // Common-rail diesel runs 1600–2500 bar; petrol direct injection 50–350.
+    plausible: [100, 300000],
     aliases: [
       ['fuel rail pressure target', 'bar'],
       ['target rail pressure', 'bar'],
       ['desired fuel pressure', 'bar'],
       ['commanded fuel rail pressure', 'kPa'],
+      ['fuel high pressure setpoint', 'bar'],
+      ['rail pressure setpoint', 'bar'],
+      ['fuel rail pressure setpoint', 'bar'],
       ['raildruck soll', 'bar'],
       ['sollraildruck', 'bar'],
     ],
@@ -584,6 +608,33 @@ export const CHANNELS: readonly ChannelSpec[] = [
       ['tankinhalt', 'percent'],
       ['tankfullstand', 'percent'],
       ['kraftstoffstand', 'percent'],
+    ],
+  },
+  {
+    // The torque the ECU calculates from its own model (injected fuel, air mass,
+    // ignition efficiency). Not a measurement: it is what the ECU believes the
+    // engine makes, which after a tune is whatever the tune's torque model says.
+    // That is exactly why it is worth logging — comparing it with the torque the
+    // car actually delivered is the thesis's core principle applied to torque.
+    id: 'ecuTorque',
+    canonicalUnit: 'Nm',
+    requirement: 'optional',
+    plausible: [-200, 2000],
+    aliases: [
+      ['engine torque', 'Nm'],
+      ['actual torque', 'Nm'],
+      ['engine torque actual', 'Nm'],
+      ['calculated torque', 'Nm'],
+      ['torque actual', 'Nm'],
+      ['indicated torque', 'Nm'],
+      ['inner torque', 'Nm'],
+      ['actual engine torque', 'Nm'],
+      ['engine torque calculated', 'Nm'],
+      ['drehmoment', 'Nm'],
+      ['motormoment', 'Nm'],
+      ['ist moment', 'Nm'],
+      ['istmoment', 'Nm'],
+      ['motordrehmoment', 'Nm'],
     ],
   },
   {

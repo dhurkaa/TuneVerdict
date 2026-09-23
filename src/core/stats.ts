@@ -320,6 +320,29 @@ export function wilsonLowerBound(successes: number, trials: number, level = CONF
   return (centre - spread) / denominator;
 }
 
+/** Standard normal CDF (Abramowitz & Stegun 7.1.26 on erf, |ε| < 1.5e-7). */
+export function normalCdf(x: number): number {
+  if (!Number.isFinite(x)) return x > 0 ? 1 : 0;
+  const z = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * z);
+  const erf =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-z * z);
+  return x >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf);
+}
+
+/**
+ * Add an independent uncertainty to an estimate, in quadrature, and rebuild its
+ * interval. Used where a source of scatter could not be measured and is assumed.
+ */
+export function widenEstimate(estimate: Estimate, extraSd: number): Estimate {
+  if (!Number.isFinite(extraSd) || extraSd <= 0) return estimate;
+  const base = Number.isFinite(estimate.sd) ? estimate.sd : 0;
+  return estimateFromSd(estimate.value, Math.sqrt(base * base + extraSd * extraSd));
+}
+
 /** Clamp into [lo, hi]. Used wherever a score must stay a score. */
 export function clamp(value: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, value));

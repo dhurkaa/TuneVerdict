@@ -20,11 +20,16 @@ import {
 } from './channels';
 import type { ChannelId } from './channels';
 import {
+  ABSOLUTE_BOOST_BARO_FRACTION,
+  ABSOLUTE_BOOST_CLOSED_PEDAL_KPA,
+  CLOSED_PEDAL_FRACTION,
   MIN_ACCEPTED_SAMPLE_RATE_HZ,
+  MS_TIMESTAMP_MIN_STEP,
   TARGET_SAMPLE_RATE_HZ,
   PHYSICS,
 } from './constants';
 import { estimateSampleRate, resampleLinear, uniformGrid } from './signal';
+import { median, quantile } from './stats';
 import { parseUnitFromHeader, toCanonical } from './units';
 import type { UnitId } from './units';
 import type { Provenance, SchemaReport, RecognisedColumn, Session } from './types';
@@ -122,14 +127,28 @@ export function parseTimestamp(raw: string | number | null | undefined): number 
 
 /**
  * Timestamps arrive in seconds, milliseconds or epoch milliseconds depending on
- * the tool. Rescale to seconds using the span: a session is minutes long, so a
- * span above 100000 in the raw units can only be milliseconds.
+ * the tool. Rescale to seconds.
+ *
+ * The span alone is not enough: an Autotuner or ECU-flasher log is often only
+ * 20–30 seconds long, so its millisecond timestamps span ~20 000 — well inside
+ * what a minutes-long log in seconds would span. The sample interval is the
+ * reliable signal: no datalogger worth analysing samples less often than every
+ * MS_TIMESTAMP_MIN_STEP seconds, so a median step that large means the column is
+ * in milliseconds. Without this, a 20 Hz Autotuner log reads as one sample every
+ * 48 seconds and is rejected as too slow.
  */
 function normaliseTimeScale(times: number[]): number[] {
   const finiteTimes = times.filter(Number.isFinite);
   if (finiteTimes.length < 2) return times;
   const span = Math.max(...finiteTimes) - Math.min(...finiteTimes);
-  const scale = span > 100000 ? 1e-3 : 1;
+  const steps: number[] = [];
+  for (let i = 1; i < finiteTimes.length; i++) {
+    const step = (finiteTimes[i] as number) - (finiteTimes[i - 1] as number);
+    if (step > 0) steps.push(step);
+  }
+  steps.sort((a, b) => a - b);
+  const medianStep = steps.length > 0 ? (steps[Math.floor(steps.length / 2)] as number) : NaN;
+  const scale = span > 100000 || medianStep >= MS_TIMESTAMP_MIN_STEP ? 1e-3 : 1;
   const t0 = Math.min(...finiteTimes) * scale;
   return times.map((t) => (Number.isFinite(t) ? t * scale - t0 : NaN));
 }
@@ -373,6 +392,37 @@ function deriveChannels(
     assumed.push({ channel: 'baro', reason: 'import.assumed.baroSeaLevel' });
   }
 
+  // A "boost" column that sits near ambient pressure when the engine is barely
+  // loaded is absolute manifold pressure under another name (Bosch EDC/MED
+  // loggers, Autotuner among them, call it "Boost pressure"). Read as gauge it
+  // would report 1.1 bar of boost at part throttle, so it is moved to MAP and
+  // boost is recomputed as gauge pressure — and the report says so.
+  const loggedBoost = channels.get('boost');
+  const baroNow = channels.get('baro');
+  if (loggedBoost && baroNow && provenance.get('boost') === 'measured' && boostIsAbsolute(loggedBoost, baroNow, channels)) {
+    {
+      if (!channels.has('map')) {
+        channels.set('map', loggedBoost);
+        provenance.set('map', 'measured');
+      }
+      const toGauge = (absolute: Float64Array): Float64Array => {
+        const gauge = new Float64Array(n).fill(NaN);
+        for (let i = 0; i < n; i++) {
+          const a = absolute[i] as number;
+          const b = baroNow[i] as number;
+          if (Number.isFinite(a) && Number.isFinite(b)) gauge[i] = a - b;
+        }
+        return gauge;
+      };
+      channels.set('boost', toGauge(loggedBoost));
+      provenance.set('boost', 'derived');
+      derived.push({ channel: 'boost', from: ['map', 'baro'] });
+      assumed.push({ channel: 'boost', reason: 'import.assumed.absoluteBoost' });
+      const target = channels.get('boostTarget');
+      if (target) channels.set('boostTarget', toGauge(target));
+    }
+  }
+
   // Boost = MAP − barometric. Gauge pressure is what a tuner reasons about.
   if (!channels.has('boost') && channels.has('map') && channels.has('baro')) {
     const map = channels.get('map') as Float64Array;
@@ -416,6 +466,35 @@ function deriveChannels(
   // an ordinal, and writing it into a channel declared as a gear number would put
   // a value of 147 where the rest of the pipeline expects 3. Segmentation clusters
   // the quotient into gears once the pulls are known (see segment.ts).
+}
+
+/**
+ * Whether a column logged as "boost" is really absolute manifold pressure.
+ *
+ * Primary test, when the pedal was ever released: gauge boost with the pedal
+ * released is at or below zero (a diesel's turbo idles near ambient, a petrol
+ * engine pulls vacuum), while absolute pressure reads 30–100 kPa, or more on
+ * overrun. Fallback, for a log that never lifts: absolute pressure never drops
+ * much below ambient on a diesel, so a quiet level near ambient is absolute.
+ */
+function boostIsAbsolute(
+  boost: Float64Array,
+  baro: Float64Array,
+  channels: Map<ChannelId, Float64Array>,
+): boolean {
+  const pedal = channels.get('throttle') ?? channels.get('pedal');
+  if (pedal) {
+    const released: number[] = [];
+    for (let i = 0; i < boost.length; i++) {
+      const p = pedal[i] as number;
+      const b = boost[i] as number;
+      if (Number.isFinite(p) && Number.isFinite(b) && p < CLOSED_PEDAL_FRACTION) released.push(b);
+    }
+    if (released.length >= 5) return median(released) > ABSOLUTE_BOOST_CLOSED_PEDAL_KPA;
+  }
+  const quiet = quantile(boost, 0.05);
+  const ambient = median(baro);
+  return Number.isFinite(quiet) && Number.isFinite(ambient) && quiet >= ABSOLUTE_BOOST_BARO_FRACTION * ambient;
 }
 
 /** Air density from barometric pressure, temperature and assumed humidity. */

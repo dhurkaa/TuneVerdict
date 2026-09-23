@@ -1,21 +1,80 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-
-// Vite's config runs in Node; we avoid a dependency on @types/node for a single lookup.
-declare const process: { env: Record<string, string | undefined> };
+import { createExplainHandler } from './server/explain';
+import { configFromEnv } from './server/providers';
 
 /**
- * GitHub Pages serves a project page from https://<user>.github.io/<repo>/, so the
- * bundle needs that prefix on every asset URL. The workflow sets BASE_PATH; local
- * dev and `vite preview` fall back to the root.
+ * Serve /api/explain from the dev server, so `npm run dev` behaves like the Vercel
+ * deployment. The key comes from `.env.local` (OPENAI_API_KEY=...), which is
+ * git-ignored and never reaches the browser bundle: only VITE_* variables do.
  */
-const base = process.env.BASE_PATH ?? '/';
+function devApi(env: Record<string, string>): Plugin {
+  return {
+    name: 'tuneverdict-dev-api',
+    configureServer(server) {
+      const handle = createExplainHandler({ config: configFromEnv(env) });
 
-export default defineConfig({
-  base,
-  plugins: [react()],
-  build: {
-    target: 'es2022',
-    sourcemap: true,
-  },
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/explain')) return next();
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+
+        const abort = new AbortController();
+        res.on('close', () => {
+          if (!res.writableEnded) abort.abort();
+        });
+
+        const headers = new Headers();
+        for (const [name, value] of Object.entries(req.headers)) {
+          if (typeof value === 'string') headers.set(name, value);
+        }
+        if (!headers.has('x-forwarded-for') && req.socket.remoteAddress) {
+          headers.set('x-forwarded-for', req.socket.remoteAddress);
+        }
+
+        const method = req.method ?? 'GET';
+        const response = await handle(
+          new Request(`http://localhost${req.url}`, {
+            method,
+            headers,
+            body: method === 'GET' || method === 'HEAD' ? undefined : Buffer.concat(chunks),
+            signal: abort.signal,
+          }),
+        );
+
+        res.statusCode = response.status;
+        response.headers.forEach((value, name) => res.setHeader(name, value));
+        if (response.body) {
+          const reader = response.body.getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+          }
+        }
+        res.end();
+      });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  // '' prefix: load every variable, including the server-only OPENAI_API_KEY. It
+  // is handed to the dev middleware above, not to the client build.
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return {
+    /**
+     * GitHub Pages serves a project page from /<repo>/, so the bundle needs that
+     * prefix; the Pages workflow sets BASE_PATH. Vercel serves from the root.
+     */
+    base: process.env.BASE_PATH ?? '/',
+    plugins: [react(), devApi(env)],
+    build: {
+      target: 'es2022',
+      sourcemap: true,
+    },
+  };
 });

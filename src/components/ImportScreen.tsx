@@ -82,8 +82,11 @@ export function ImportScreen({
           />
         </div>
 
+        <hr className="divider" />
+        <VehicleForm value={vehicle} onChange={onVehicleChange} />
+
         <div className="row-between" style={{ flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-          <p className="field-hint" style={{ maxWidth: '56ch' }}>
+          <p className="field-hint" style={{ maxWidth: '60ch' }}>
             {ready ? t('app.privacy') : t('import.waitingBoth')}
           </p>
           <button
@@ -91,6 +94,7 @@ export function ImportScreen({
             className="button button-primary"
             disabled={!ready || analysing}
             onClick={onAnalyse}
+            style={{ minWidth: 180 }}
           >
             {analysing ? t('import.analysing') : t('import.analyse')}
           </button>
@@ -104,9 +108,25 @@ export function ImportScreen({
         )}
       </Panel>
 
-      {reports.length > 0 && <SchemaReportPanel reports={reports} />}
-
-      <VehicleForm value={vehicle} onChange={onVehicleChange} />
+      {reports.length > 0 && (
+        <details className="panel" style={{ padding: 'var(--space-2) var(--space-3)' }}>
+          <summary>
+            {t('import.schema.title')} —{' '}
+            {reports
+              .map((report) =>
+                t('import.schema.summary', {
+                  recognised: report.recognised.length,
+                  missing: report.missingRecommended.length,
+                  unrecognised: report.unrecognised.length,
+                }),
+              )
+              .join('  |  ')}
+          </summary>
+          <div style={{ marginTop: 'var(--space-2)' }}>
+            <SchemaReportPanel reports={reports} />
+          </div>
+        </details>
+      )}
 
       {!ready && <EmptyState />}
     </div>

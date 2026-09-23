@@ -23,6 +23,9 @@
   --caution: #e8b04b;
   --risk: #e2574c;
   --reference: #7e8c94;
+  /* Torque. Power keeps the signal colour; torque needs a second hue that is not
+     red (red means risk) and not the caution amber. */
+  --torque: #7fa8ea;
 
   --on-signal: #06211b;
   --primary-bg: var(--signal);
@@ -34,6 +37,7 @@
   --caution-tint: rgba(232, 176, 75, 0.14);
   --risk-tint: rgba(226, 87, 76, 0.14);
   --reference-tint: rgba(126, 140, 148, 0.16);
+  --torque-tint: rgba(127, 168, 234, 0.16);
 
   /* Typography. IBM Plex Mono for every number, always: monospace figures align
      down a column, which for a measuring tool is legibility, not taste. */
@@ -57,7 +61,7 @@
   --radius-panel: 14px;
   --control-height: 44px;
 
-  --max-width: 1180px;
+  --max-width: 1400px;
 }
 
 :root[data-theme='light'] {
@@ -72,6 +76,7 @@
   --caution: #9a6706;
   --risk: #be3a2e;
   --reference: #6a777e;
+  --torque: #2f63b3;
 
   /* On light, the primary button darkens for contrast against white text. */
   --primary-bg: #0a6a57;
@@ -81,6 +86,7 @@
   --caution-tint: rgba(154, 103, 6, 0.12);
   --risk-tint: rgba(190, 58, 46, 0.12);
   --reference-tint: rgba(106, 119, 126, 0.16);
+  --torque-tint: rgba(47, 99, 179, 0.14);
 }
 
 /* Printing is a first-class output here: the report ends up in an A4 thesis. */
@@ -97,5 +103,6 @@
     --caution: #7d5305;
     --risk: #a62f24;
     --reference: #5c686e;
+    --torque: #2f63b3;
   }
 }

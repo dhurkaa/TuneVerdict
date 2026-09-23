@@ -13,7 +13,8 @@
  */
 
 import {
-  MIN_PULLS_PER_SESSION,
+  MIN_PULLS_FOR_STATISTICS,
+  PRIOR_PULL_CV,
   PROTOCOL_MAX_IAT_DELTA_C,
   PROTOCOL_MIN_COOLANT_C,
   PROTOCOL_MIN_FUEL_FRACTION,
@@ -23,6 +24,7 @@ import {
   PROTOCOL_RPM_LOW,
   TARGET_SAMPLE_RATE_HZ,
   WARN_SAMPLE_RATE_HZ,
+  DIESEL_LAMBDA_HINT,
 } from './constants';
 import { mean, median } from './stats';
 import type { PullData } from './segment';
@@ -33,6 +35,8 @@ export interface ProtocolInput {
   readonly pulls: readonly PullData[];
   readonly rejectedCount: number;
   readonly which: 'before' | 'after';
+  /** The protocol's rpm window for this fuel; the petrol window when omitted. */
+  readonly rpmRange?: { readonly low: number; readonly high: number };
 }
 
 /**
@@ -42,16 +46,20 @@ export interface ProtocolInput {
 export function checkSession(input: ProtocolInput): ProtocolViolation[] {
   const violations: ProtocolViolation[] = [];
   const { session, pulls, which } = input;
+  const rpmLow = input.rpmRange?.low ?? PROTOCOL_RPM_LOW;
+  const rpmHigh = input.rpmRange?.high ?? PROTOCOL_RPM_HIGH;
 
-  if (pulls.length < MIN_PULLS_PER_SESSION) {
+  if (pulls.length < MIN_PULLS_FOR_STATISTICS) {
+    // Analysable, but the pull-to-pull scatter is assumed rather than measured:
+    // the interval and the significance test rest on PRIOR_PULL_CV.
     violations.push({
-      key: 'protocol.tooFewPulls',
-      severity: 'risk',
+      key: 'protocol.assumedScatter',
+      severity: 'caution',
       detail: {
         session: which,
         found: pulls.length,
-        minimum: MIN_PULLS_PER_SESSION,
-        expected: PROTOCOL_PULLS_PER_SESSION,
+        needed: MIN_PULLS_FOR_STATISTICS,
+        cv: PRIOR_PULL_CV * 100,
         rejected: input.rejectedCount,
       },
     });
@@ -134,19 +142,19 @@ export function checkSession(input: ProtocolInput): ProtocolViolation[] {
   if (
     Number.isFinite(highest) &&
     highest > 0 &&
-    highest < PROTOCOL_RPM_HIGH - PROTOCOL_RPM_COVERAGE_TOLERANCE
+    highest < rpmHigh - PROTOCOL_RPM_COVERAGE_TOLERANCE
   ) {
     violations.push({
       key: 'protocol.rpmCoverageHigh',
       severity: 'caution',
-      detail: { session: which, reached: round(highest, 0), expected: PROTOCOL_RPM_HIGH },
+      detail: { session: which, reached: round(highest, 0), expected: rpmHigh },
     });
   }
-  if (Number.isFinite(lowest) && lowest > PROTOCOL_RPM_LOW + PROTOCOL_RPM_COVERAGE_TOLERANCE) {
+  if (Number.isFinite(lowest) && lowest > rpmLow + PROTOCOL_RPM_COVERAGE_TOLERANCE) {
     violations.push({
       key: 'protocol.rpmCoverageLow',
       severity: 'caution',
-      detail: { session: which, started: round(lowest, 0), expected: PROTOCOL_RPM_LOW },
+      detail: { session: which, started: round(lowest, 0), expected: rpmLow },
     });
   }
 
@@ -205,6 +213,30 @@ export function checkPair(
   }
 
   return violations;
+}
+
+/**
+ * A petrol engine at full load runs rich, λ 0.75–0.9; a diesel never does. When
+ * the fuel setting says petrol but the logged λ under full load sits well above 1,
+ * the setting is almost certainly wrong — and with it, how an AFR column was
+ * converted and whether the lean detector should run at all.
+ */
+export function checkFuel(
+  pulls: readonly PullData[],
+  fuel: 'gasoline' | 'diesel' | 'e85' | 'lpg',
+): ProtocolViolation[] {
+  if (fuel === 'diesel') return [];
+  const values: number[] = [];
+  for (const pull of pulls) {
+    const lambda = pull.onRpm.get('lambda');
+    if (!lambda) continue;
+    for (const v of lambda) if (Number.isFinite(v)) values.push(v);
+  }
+  if (values.length === 0) return [];
+  const typical = median(values);
+  return typical > DIESEL_LAMBDA_HINT
+    ? [{ key: 'protocol.lambdaLooksDiesel', severity: 'caution', detail: { lambda: round(typical, 2) } }]
+    : [];
 }
 
 function round(value: number, digits: number): number {

@@ -29,6 +29,7 @@ export type Quantity =
   | 'massFlow'
   | 'voltage'
   | 'count'
+  | 'torque'
   | 'ratioDimensionless';
 
 export type UnitId =
@@ -71,6 +72,9 @@ export type UnitId =
   | 'mV'
   // countable (gear number, cylinder index)
   | 'count'
+  // torque
+  | 'Nm'
+  | 'lbft'
   // dimensionless
   | 'lambda'
   | 'afrGasoline'
@@ -146,6 +150,10 @@ const UNITS: Record<UnitId, UnitSpec> = {
 
   // countable → itself
   count: { quantity: 'count', scale: 1, offset: 0 },
+
+  // torque → N·m
+  Nm: { quantity: 'torque', scale: 1, offset: 0 },
+  lbft: { quantity: 'torque', scale: 1.3558179483314, offset: 0 },
 
   // dimensionless → λ
   lambda: { quantity: 'ratioDimensionless', scale: 1, offset: 0 },
@@ -234,6 +242,9 @@ const UNIT_TOKENS: Record<string, UnitId> = {
   // electrical
   v: 'V', volt: 'V', volts: 'V',
   mv: 'mV', millivolt: 'mV', millivolts: 'mV',
+  // torque
+  nm: 'Nm', newtonmeter: 'Nm', newtonmetre: 'Nm',
+  lbft: 'lbft', ftlb: 'lbft', ftlbs: 'lbft', lbsft: 'lbft',
   // dimensionless
   lambda: 'lambda', l: 'lambda',
   afr: 'afrGasoline', afrgasoline: 'afrGasoline', afrpetrol: 'afrGasoline',

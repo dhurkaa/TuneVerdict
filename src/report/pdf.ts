@@ -28,8 +28,8 @@ export type FontName = 'Helvetica' | 'Helvetica-Bold';
  * an empty box is not.
  */
 const TRANSLITERATIONS: Record<string, string> = {
-  'λ': 'lambda',
-  'σ': 'sd',
+  λ: 'lambda',
+  σ: 'sd',
   '−': '-',
   '–': '-',
   '—': '-',
@@ -133,9 +133,39 @@ export const REPORT_COLOURS = {
   muted: { r: 0.35, g: 0.4, b: 0.43 },
   line: { r: 0.79, g: 0.82, b: 0.83 },
   signal: { r: 0.04, g: 0.42, b: 0.34 },
+  torque: { r: 0.18, g: 0.39, b: 0.7 },
   caution: { r: 0.49, g: 0.33, b: 0.02 },
   risk: { r: 0.65, g: 0.18, b: 0.14 },
 } as const satisfies Record<string, Rgb>;
+
+export interface PdfSeries {
+  readonly axis: 'left' | 'right';
+  readonly colour: Rgb;
+  readonly dashed: boolean;
+  readonly width: number;
+  readonly points: readonly { x: number; y: number }[];
+  readonly band?: readonly { x: number; lo: number; hi: number }[];
+}
+
+export interface PdfChartSpec {
+  readonly height: number;
+  readonly xMin: number;
+  readonly xMax: number;
+  readonly xTicks: readonly number[];
+  readonly xLabel: string;
+  readonly intervals: number;
+  readonly leftMin: number;
+  readonly leftMax: number;
+  readonly leftStep: number;
+  readonly leftLabel: string;
+  readonly leftColour: Rgb;
+  readonly rightMin: number;
+  readonly rightMax: number;
+  readonly rightStep: number;
+  readonly rightLabel: string;
+  readonly rightColour: Rgb;
+  readonly series: readonly PdfSeries[];
+}
 
 export class PdfDocument {
   private readonly pages: Page[] = [];
@@ -223,6 +253,98 @@ export class PdfDocument {
     this.page.y -= height;
   }
 
+  /** Text at an absolute position, aligned left, right or centre on x. */
+  private textAt(
+    x: number,
+    y: number,
+    value: string,
+    options: { size?: number; colour?: Rgb; align?: 'left' | 'right' | 'center'; bold?: boolean } = {},
+  ): void {
+    const size = options.size ?? 8;
+    const font: FontName = options.bold ? 'Helvetica-Bold' : 'Helvetica';
+    const colour = options.colour ?? REPORT_COLOURS.muted;
+    const width = widthOf(value, font, size);
+    const left = options.align === 'right' ? x - width : options.align === 'center' ? x - width / 2 : x;
+    this.page.push(
+      `BT /${options.bold ? 'F2' : 'F1'} ${size} Tf ${colour.r} ${colour.g} ${colour.b} rg ` +
+        `1 0 0 1 ${left.toFixed(2)} ${y.toFixed(2)} Tm (${escapeText(value)}) Tj ET`,
+    );
+  }
+
+  /**
+   * A line chart with a left and a right value axis sharing one grid — the torque
+   * and power chart of the report, drawn with the same rules as the screen:
+   * before dashed, after solid, each with its interval as a band.
+   *
+   * PDF has no transparency without extra machinery, so bands are drawn first in a
+   * pale tint of their line's colour, and the lines on top.
+   */
+  chart(spec: PdfChartSpec): void {
+    const height = spec.height;
+    this.ensure(height + 34);
+    const left = MARGIN + 34;
+    const right = PAGE_WIDTH - MARGIN - 34;
+    const top = this.page.y - 12;
+    const bottom = this.page.y - height;
+    const x = (v: number) => left + ((v - spec.xMin) / (spec.xMax - spec.xMin || 1)) * (right - left);
+    const yLeft = (v: number) => bottom + ((v - spec.leftMin) / (spec.leftMax - spec.leftMin)) * (top - bottom);
+    const yRight = (v: number) => bottom + ((v - spec.rightMin) / (spec.rightMax - spec.rightMin)) * (top - bottom);
+
+    // Grid and axis labels.
+    for (let i = 0; i <= spec.intervals; i++) {
+      const y = bottom + (i / spec.intervals) * (top - bottom);
+      this.page.push(
+        `${REPORT_COLOURS.line.r} ${REPORT_COLOURS.line.g} ${REPORT_COLOURS.line.b} RG 0.4 w ${left.toFixed(2)} ${y.toFixed(2)} m ${right.toFixed(2)} ${y.toFixed(2)} l S`,
+      );
+      this.textAt(left - 4, y - 2.5, String(Math.round(spec.leftMin + i * spec.leftStep)), {
+        colour: spec.leftColour,
+        align: 'right',
+      });
+      this.textAt(right + 4, y - 2.5, String(Math.round(spec.rightMin + i * spec.rightStep)), {
+        colour: spec.rightColour,
+      });
+    }
+    for (const tick of spec.xTicks) {
+      this.textAt(x(tick), bottom - 10, String(tick), { align: 'center' });
+    }
+    this.textAt(left - 4, top + 5, spec.leftLabel, { colour: spec.leftColour, align: 'right' });
+    this.textAt(right + 4, top + 5, spec.rightLabel, { colour: spec.rightColour });
+    this.textAt(right, bottom - 20, spec.xLabel, { align: 'right' });
+
+    const yOf = (axis: 'left' | 'right') => (axis === 'left' ? yLeft : yRight);
+
+    for (const series of spec.series) {
+      if (!series.band || series.band.length < 2) continue;
+      const y = yOf(series.axis);
+      const tint = {
+        r: 1 - (1 - series.colour.r) * 0.18,
+        g: 1 - (1 - series.colour.g) * 0.18,
+        b: 1 - (1 - series.colour.b) * 0.18,
+      };
+      const upper = series.band.map((p) => `${x(p.x).toFixed(2)} ${y(p.hi).toFixed(2)}`);
+      const lower = [...series.band].reverse().map((p) => `${x(p.x).toFixed(2)} ${y(p.lo).toFixed(2)}`);
+      this.page.push(
+        `${tint.r.toFixed(3)} ${tint.g.toFixed(3)} ${tint.b.toFixed(3)} rg ${upper[0]} m ` +
+          `${[...upper.slice(1), ...lower].map((pt) => `${pt} l`).join(' ')} h f`,
+      );
+    }
+
+    for (const series of spec.series) {
+      if (series.points.length < 2) continue;
+      const y = yOf(series.axis);
+      const [first, ...rest] = series.points;
+      if (!first) continue;
+      this.page.push(
+        `${series.colour.r} ${series.colour.g} ${series.colour.b} RG ${series.width} w ` +
+          `${series.dashed ? '[4 3] 0 d' : '[] 0 d'} 1 j ` +
+          `${x(first.x).toFixed(2)} ${y(first.y).toFixed(2)} m ` +
+          `${rest.map((p) => `${x(p.x).toFixed(2)} ${y(p.y).toFixed(2)} l`).join(' ')} S [] 0 d`,
+      );
+    }
+
+    this.page.y = bottom - 28;
+  }
+
   /** A filled proportion bar, for the validity factors. */
   bar(fraction: number, colour: Rgb): void {
     const height = 6;
@@ -251,9 +373,7 @@ export class PdfDocument {
 
     objects.push(`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`);
     objects.push(
-      `2 0 obj\n<< /Type /Pages /Count ${pageCount} /Kids [${pageIds
-        .map((id) => `${id} 0 R`)
-        .join(' ')}] >>\nendobj\n`,
+      `2 0 obj\n<< /Type /Pages /Count ${pageCount} /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] >>\nendobj\n`,
     );
     objects.push(
       `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`,
@@ -270,9 +390,7 @@ export class PdfDocument {
         `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] ` +
           `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${streamId} 0 R >>\nendobj\n`,
       );
-      objects.push(
-        `${streamId} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`,
-      );
+      objects.push(`${streamId} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
     });
 
     let pdf = '%PDF-1.4\n';

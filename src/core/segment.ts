@@ -14,6 +14,8 @@ import {
   GEAR_MIN_SPEED_MS,
   GEAR_RATIO_TOLERANCE,
   PROTOCOL_RPM_HIGH,
+  PROTOCOL_RPM_HIGH_DIESEL,
+  PROTOCOL_RPM_LOW_DIESEL,
   PROTOCOL_RPM_LOW,
   PULL_EDGE_TRIM_SAMPLES,
   SMOOTH_HALF_WINDOW,
@@ -51,6 +53,13 @@ export interface SegmentationResult {
 }
 
 /** The shared rpm axis. Built once and reused, so every pull is directly comparable. */
+/** The protocol's rpm window for the fuel: a diesel neither reaches nor needs 5500 rpm. */
+export function protocolRpmRange(fuel: VehicleParameters['fuel']): { low: number; high: number } {
+  return fuel === 'diesel'
+    ? { low: PROTOCOL_RPM_LOW_DIESEL, high: PROTOCOL_RPM_HIGH_DIESEL }
+    : { low: PROTOCOL_RPM_LOW, high: PROTOCOL_RPM_HIGH };
+}
+
 export function buildRpmAxis(low = PROTOCOL_RPM_LOW, high = PROTOCOL_RPM_HIGH): Float64Array {
   const n = Math.floor((high - low) / CURVE_RPM_STEP) + 1;
   const axis = new Float64Array(n);
@@ -61,6 +70,7 @@ export function buildRpmAxis(low = PROTOCOL_RPM_LOW, high = PROTOCOL_RPM_HIGH): 
 /** Channels the detectors want resampled onto the rpm axis alongside the power basis. */
 const DETECTOR_CHANNELS = [
   'lambda',
+  'lambdaTarget',
   'knockRetard',
   'timing',
   'boost',
@@ -70,6 +80,8 @@ const DETECTOR_CHANNELS = [
   'iat',
   'egt',
   'map',
+  'engineLoad',
+  'ecuTorque',
 ] as const;
 
 /**
@@ -101,7 +113,13 @@ export function segment(
   const smoothSpeed = speedFit.value;
   const rpmFit = localQuadratic(rpm, dt, SMOOTH_HALF_WINDOW);
 
-  const candidates = findThrottleSegments(throttle);
+  // A full-throttle stretch on an automatic gearbox is usually several gears: a
+  // kickdown, then upshifts. Each gear is its own pull; measured across a shift,
+  // the speed trace and the rpm trace stop describing the same thing.
+  const loggedGear = session.channels.get('gear');
+  const candidates = findThrottleSegments(throttle).flatMap(([s, e]) =>
+    splitAtGearChanges(s, e, rpm, speed, loggedGear),
+  );
 
   const accepted: PullData[] = [];
   const rejected: Pull[] = [];
@@ -199,6 +217,50 @@ function findThrottleSegments(throttle: Float64Array): [number, number][] {
   }
   if (start !== -1 && lastOpen > start) segments.push([start, lastOpen]);
   return segments;
+}
+
+/**
+ * Split a segment wherever the gear changes: when the logged gear changes, or —
+ * for logs without a gear channel — when the rpm-per-speed ratio moves by more
+ * than GEAR_RATIO_TOLERANCE from where the piece started. The samples of the
+ * shift itself (clutch or torque converter slipping, ratio in between two gears)
+ * end up in short pieces that the duration rule then rejects.
+ */
+function splitAtGearChanges(
+  start: number,
+  end: number,
+  rpm: Float64Array,
+  speed: Float64Array,
+  loggedGear: Float64Array | undefined,
+): [number, number][] {
+  const pieces: [number, number][] = [];
+  let pieceStart = start;
+  let referenceRatio = NaN;
+  let referenceGear = NaN;
+
+  for (let i = start; i <= end; i++) {
+    const r = rpm[i] as number;
+    const v = speed[i] as number;
+    const ratio = Number.isFinite(r) && Number.isFinite(v) && v > GEAR_MIN_SPEED_MS ? r / v : NaN;
+    const gear = loggedGear ? Math.round(loggedGear[i] as number) : NaN;
+
+    const gearChanged = Number.isFinite(gear) && Number.isFinite(referenceGear) && gear !== referenceGear;
+    const ratioChanged =
+      Number.isFinite(ratio) &&
+      Number.isFinite(referenceRatio) &&
+      Math.abs(ratio - referenceRatio) / referenceRatio > GEAR_RATIO_TOLERANCE;
+
+    if ((gearChanged || ratioChanged) && i > pieceStart) {
+      pieces.push([pieceStart, i - 1]);
+      pieceStart = i;
+      referenceRatio = NaN;
+      referenceGear = NaN;
+    }
+    if (!Number.isFinite(referenceRatio) && Number.isFinite(ratio)) referenceRatio = ratio;
+    if (!Number.isFinite(referenceGear) && Number.isFinite(gear)) referenceGear = gear;
+  }
+  if (end >= pieceStart) pieces.push([pieceStart, end]);
+  return pieces;
 }
 
 function describeCandidate(

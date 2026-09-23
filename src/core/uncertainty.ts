@@ -28,11 +28,12 @@ import {
   MONTE_CARLO_DRAWS,
   VEHICLE_DEFAULTS,
 } from './constants';
-import { powerCurveWatts, wattsToHp } from './power';
+import { hpToTorqueNm, powerCurveWatts, wattsToHp } from './power';
 import type { ParameterDraw } from './power';
 import { estimateFromDraws, type Rng } from './stats';
 import type {
   Estimate,
+  PeakRpm,
   PowerCurvePoint,
   UncertaintyBudget,
   VehicleParameters,
@@ -57,6 +58,13 @@ export interface MonteCarloOutput {
   /** Peak power per pull at nominal parameters — the input to the significance test. */
   readonly peakPerPullBefore: readonly number[];
   readonly peakPerPullAfter: readonly number[];
+  /** Mean difference across the compared rpm band. */
+  readonly averageDelta: Estimate;
+  /** Peak crank torque per session and its difference, N·m. */
+  readonly peakTorqueBefore: Estimate;
+  readonly peakTorqueAfter: Estimate;
+  readonly torqueDelta: Estimate;
+  readonly peakRpm: PeakRpm;
 }
 
 interface Sampled {
@@ -182,6 +190,41 @@ function smoothCurveInPlace(curve: Float64Array, k: number): void {
 /** Reused between draws; the Monte Carlo runs this thousands of times. */
 const SMOOTH_SCRATCH = new Float64Array(512);
 
+/** Maximum of a draw's torque curve, N·m, from its power curve in hp. */
+function peakTorqueOf(curve: Float64Array, rpmAxis: Float64Array): number {
+  let peak = NaN;
+  for (let i = 0; i < curve.length; i++) {
+    const torque = hpToTorqueNm(curve[i] as number, rpmAxis[i] as number);
+    if (Number.isFinite(torque) && (!Number.isFinite(peak) || torque > peak)) peak = torque;
+  }
+  return peak;
+}
+
+/**
+ * The rpm at which each session's curve peaks, read from the reported (mean)
+ * curve — the "@ 4000 rpm" of a dyno sheet.
+ */
+function peakRpms(curve: readonly PowerCurvePoint[]): PeakRpm {
+  const argmax = (value: (p: PowerCurvePoint) => number): number => {
+    let best = NaN;
+    let bestValue = -Infinity;
+    for (const point of curve) {
+      const v = value(point);
+      if (Number.isFinite(v) && v > bestValue) {
+        bestValue = v;
+        best = point.rpm;
+      }
+    }
+    return best;
+  };
+  return {
+    powerBefore: argmax((p) => p.before.value),
+    powerAfter: argmax((p) => p.after.value),
+    torqueBefore: argmax((p) => hpToTorqueNm(p.before.value, p.rpm)),
+    torqueAfter: argmax((p) => hpToTorqueNm(p.after.value, p.rpm)),
+  };
+}
+
 function peakOf(curve: Float64Array): number {
   let peak = NaN;
   for (let i = 0; i < curve.length; i++) {
@@ -218,6 +261,9 @@ export function runMonteCarlo(
   const peakA = new Float64Array(draws).fill(NaN);
   const deltaDraws = new Float64Array(draws).fill(NaN);
   const deltaPercentDraws = new Float64Array(draws).fill(NaN);
+  const torqueB = new Float64Array(draws).fill(NaN);
+  const torqueA = new Float64Array(draws).fill(NaN);
+  const torqueDeltaDraws = new Float64Array(draws).fill(NaN);
 
   // Per-rpm draws, laid out [rpmIndex * draws + draw].
   const curveDrawsBefore = new Float64Array(k * draws).fill(NaN);
@@ -240,6 +286,13 @@ export function runMonteCarlo(
     peakB[d] = pb;
     peakA[d] = pa;
     deltaDraws[d] = pa - pb;
+    // Peak torque is not peak power scaled: it sits at a different rpm, so it is
+    // taken from each draw's own torque curve.
+    const tb = peakTorqueOf(curveBefore, rpmAxis);
+    const ta = peakTorqueOf(curveAfter, rpmAxis);
+    torqueB[d] = tb;
+    torqueA[d] = ta;
+    torqueDeltaDraws[d] = ta - tb;
     deltaPercentDraws[d] = pb > 0 ? ((pa - pb) / pb) * 100 : NaN;
 
     for (let i = 0; i < k; i++) {
@@ -268,6 +321,9 @@ export function runMonteCarlo(
   const peakAfter = estimateFromDraws(peakA);
   const delta = estimateFromDraws(deltaDraws);
   const deltaPercent = estimateFromDraws(deltaPercentDraws);
+  const peakTorqueBefore = estimateFromDraws(torqueB);
+  const peakTorqueAfter = estimateFromDraws(torqueA);
+  const torqueDelta = estimateFromDraws(torqueDeltaDraws);
 
   // How much of the error cancelled: the uncertainty of an absolute figure over
   // the uncertainty of the difference. Both sessions are the same car on the same
@@ -291,12 +347,37 @@ export function runMonteCarlo(
     });
   }
 
+  // Mean difference across the compared band, per draw, over the rpm points where
+  // the comparison is defined. Averaging inside each draw (rather than averaging
+  // the per-point estimates) keeps the correlation between neighbouring points,
+  // so the interval is not falsely narrowed by treating 60 points as independent.
+  const compared = curve.map((point, i) => (Number.isFinite(point.delta.value) ? i : -1)).filter((i) => i >= 0);
+  const averageDraws = new Float64Array(draws).fill(NaN);
+  for (let d = 0; d < draws; d++) {
+    let sum = 0;
+    let n = 0;
+    for (const i of compared) {
+      const value = curveDrawsDelta[i * draws + d] as number;
+      if (Number.isFinite(value)) {
+        sum += value;
+        n++;
+      }
+    }
+    if (n > 0) averageDraws[d] = sum / n;
+  }
+  const averageDelta = estimateFromDraws(averageDraws);
+
   return {
     peakBefore,
     peakAfter,
     delta,
     deltaPercent,
     commonModeCancellation,
+    averageDelta,
+    peakTorqueBefore,
+    peakTorqueAfter,
+    torqueDelta,
+    peakRpm: peakRpms(curve),
     curve,
     budget: varianceBudget(after, vehicle, k, rng),
     peakPerPullBefore,

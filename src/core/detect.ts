@@ -55,6 +55,12 @@ export interface DetectorContext {
   readonly correctionInBand: boolean;
   /** Intake air temperature rise across the session, °C. */
   readonly iatRiseC: number;
+  /**
+   * The fuel. A diesel runs lean by design — λ 1.2–5 under load is normal and
+   * the smoke limit, not the lean limit, is its constraint — so the petrol lean
+   * detector is not run on a diesel: it would fire on every pull.
+   */
+  readonly fuel: 'gasoline' | 'diesel' | 'e85' | 'lpg';
 }
 
 /** The rpm bands findings are reported in. */
@@ -66,12 +72,20 @@ export function zones(): Zone[] {
   return out;
 }
 
+/**
+ * Zones are half-open, [low, high), except the last, which includes its upper
+ * edge. With closed zones the point at 5000 rpm belonged to both 4000–5000 and
+ * 5000–5500, so an event that began exactly at a boundary was counted in the zone
+ * below it as well.
+ */
 function zoneIndices(rpmAxis: Float64Array, zone: Zone): [number, number] {
+  const lastEdge = ZONE_RPM_EDGES[ZONE_RPM_EDGES.length - 1] as number;
   let lo = rpmAxis.length;
   let hi = -1;
   for (let i = 0; i < rpmAxis.length; i++) {
     const rpm = rpmAxis[i] as number;
-    if (rpm >= zone.rpmLow && rpm <= zone.rpmHigh) {
+    const belowTop = rpm < zone.rpmHigh || (zone.rpmHigh === lastEdge && rpm <= zone.rpmHigh);
+    if (rpm >= zone.rpmLow && belowTop) {
       if (i < lo) lo = i;
       if (i > hi) hi = i;
     }
@@ -338,6 +352,38 @@ const THRESHOLD_DETECTORS: readonly ThresholdSpec[] = [
   },
 ];
 
+/**
+ * The series a threshold detector compares, for one pull over one rpm-axis range.
+ *
+ * Exposed so that the margin and correction analyses read *exactly* the quantity
+ * the detector reads — boost as a fraction of target, rail pressure as a fraction
+ * short of its reference — rather than a second, subtly different definition that
+ * could disagree with the finding it sits beside.
+ */
+export function limitSeries(
+  kind: FindingKind,
+  pull: PullData,
+  lo: number,
+  hi: number,
+): Float64Array | null {
+  const spec = THRESHOLD_DETECTORS.find((candidate) => candidate.kind === kind);
+  if (!spec) return null;
+  return spec.transform ? spec.transform(pull, lo, hi) : seriesFor(pull, spec.channel);
+}
+
+/** A detector's threshold and which side of it is the anomaly. */
+export function detectorLimit(
+  kind: FindingKind,
+): { threshold: number; direction: 'above' | 'below'; channel: ChannelId } | null {
+  const spec = THRESHOLD_DETECTORS.find((candidate) => candidate.kind === kind);
+  return spec ? { threshold: spec.threshold, direction: spec.direction, channel: spec.channel } : null;
+}
+
+/** Index range of the rpm axis inside a zone, inclusive; hi < lo when empty. */
+export function zoneRange(rpmAxis: Float64Array, zone: Zone): [number, number] {
+  return zoneIndices(rpmAxis, zone);
+}
+
 function exceeds(value: number, threshold: number, direction: 'above' | 'below'): boolean {
   if (!Number.isFinite(value)) return false;
   return direction === 'above' ? value > threshold : value < threshold;
@@ -350,6 +396,7 @@ export function detectThresholds(ctx: DetectorContext): Finding[] {
   if (totalPulls === 0) return findings;
 
   for (const spec of THRESHOLD_DETECTORS) {
+    if (spec.kind === 'lean' && ctx.fuel === 'diesel') continue;
     const provenance = ctx.provenanceOf(spec.channel);
     if (provenance === 'missing') continue;
 

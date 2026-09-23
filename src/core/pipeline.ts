@@ -10,19 +10,40 @@
  * random source is seeded from the input itself.
  */
 
+import { gainBands } from './bands';
+import { buildCorrections } from './corrections';
+import { compareEcuTorque } from './ecuTorque';
+import { assessHealth } from './health';
 import { detectHeatSoak, detectResidualOutliers, detectThresholds } from './detect';
+import { loggingAdvice } from './loggingAdvice';
+import { computeMargins } from './margins';
+import { trackSession } from './tracking';
 import type { DetectorContext } from './detect';
 import { pairPulls } from './dtw';
 import type { Pairing } from './dtw';
-import { CONFIDENCE, MIN_PULLS_PER_SESSION, SIGNIFICANCE_ALPHA } from './constants';
+import {
+  CONFIDENCE,
+  MIN_PULLS_FOR_STATISTICS,
+  MIN_PULLS_PER_SESSION,
+  PRIOR_PULL_CV,
+  SIGNIFICANCE_ALPHA,
+} from './constants';
 import { nominalDraw, powerCurveWatts, wattsToHp } from './power';
-import { checkPair, checkSession } from './protocol';
+import { checkFuel, checkPair, checkSession } from './protocol';
 import { recommend } from './recommend';
-import { buildRpmAxis, classifyGears, segment } from './segment';
+import { buildRpmAxis, classifyGears, protocolRpmRange, segment } from './segment';
 import type { PullData, SegmentationResult } from './segment';
-import { coefficientOfVariation, makeRng, mean, permutationPValue, seedFrom } from './stats';
+import {
+  coefficientOfVariation,
+  makeRng,
+  mean,
+  normalCdf,
+  permutationPValue,
+  seedFrom,
+  widenEstimate,
+} from './stats';
 import { runMonteCarlo } from './uncertainty';
-import type { SessionBasis } from './uncertainty';
+import type { MonteCarloOutput, SessionBasis } from './uncertainty';
 import { buildValidityCard } from './validity';
 import type {
   AnalysisResult,
@@ -56,18 +77,24 @@ export function analyse(
   vehicle: VehicleParameters,
   options: AnalyseOptions = {},
 ): AnalysisResult {
-  const rpmAxis = buildRpmAxis();
+  const range = protocolRpmRange(vehicle.fuel);
+  const rpmAxis = buildRpmAxis(range.low, range.high);
 
-  const segBefore = segment(before, vehicle, rpmAxis);
-  const segAfter = segment(after, vehicle, rpmAxis);
+  const segmentedBefore = segment(before, vehicle, rpmAxis);
+  const segmentedAfter = segment(after, vehicle, rpmAxis);
 
   // Gears are classified across both sessions at once, so that "gear 3" means the
   // same gear in both logs. Classifying them separately would let a 3rd-gear
   // before-session and a 4th-gear after-session both be labelled "gear 1".
   classifyGears(
-    [segBefore.pulls, segAfter.pulls],
+    [segmentedBefore.pulls, segmentedAfter.pulls],
     [before.channels.get('gear'), after.channels.get('gear')],
   );
+
+  // Compare like with like: when the logs hold pulls in several gears — a road log
+  // from an automatic gearbox always does — only the gear both sessions share, and
+  // cover best, is compared. The rest are reported as rejected, with the reason.
+  const [segBefore, segAfter] = selectCommonGear(segmentedBefore, segmentedAfter);
 
   if (segBefore.pulls.length < MIN_PULLS_PER_SESSION) {
     throw new AnalysisError('analysis.error.tooFewPulls', {
@@ -92,12 +119,23 @@ export function analyse(
   const basisBefore = toSessionBasis(segBefore);
   const basisAfter = toSessionBasis(segAfter);
 
-  const mc = runMonteCarlo(basisBefore, basisAfter, vehicle, rpmAxis, rng, options.monteCarloDraws);
+  const rawMc = runMonteCarlo(basisBefore, basisAfter, vehicle, rpmAxis, rng, options.monteCarloDraws);
+
+  const nBefore = segBefore.pulls.length;
+  const nAfter = segAfter.pulls.length;
+  const fewPulls = nBefore < MIN_PULLS_FOR_STATISTICS || nAfter < MIN_PULLS_FOR_STATISTICS;
+  const mc = fewPulls ? withAssumedScatter(rawMc, nBefore, nAfter) : rawMc;
 
   // Significance is tested on the per-pull peaks rather than on the Monte Carlo
   // draws: the question "did this tune do anything" is a question about the pulls,
-  // and the parameter uncertainty is common to both sessions and cancels.
-  const pValue = permutationPValue(mc.peakPerPullBefore, mc.peakPerPullAfter, rng);
+  // and the parameter uncertainty is common to both sessions and cancels. With too
+  // few pulls for a permutation test, a z-test against the assumed pull-to-pull
+  // scatter stands in — and the protocol panel says it was assumed.
+  const pValue = fewPulls
+    ? mc.delta.sd > 0
+      ? 2 * (1 - normalCdf(Math.abs(mc.delta.value) / mc.delta.sd))
+      : NaN
+    : permutationPValue(mc.peakPerPullBefore, mc.peakPerPullAfter, rng);
   const significant = Number.isFinite(pValue) && pValue < SIGNIFICANCE_ALPHA;
 
   const gain: GainResult = {
@@ -108,6 +146,12 @@ export function analyse(
     commonModeCancellation: mc.commonModeCancellation,
     significant,
     pValue,
+    averageDelta: mc.averageDelta,
+    bands: gainBands(mc.curve),
+    peakTorqueBefore: mc.peakTorqueBefore,
+    peakTorqueAfter: mc.peakTorqueAfter,
+    torqueDelta: mc.torqueDelta,
+    peakRpm: mc.peakRpm,
   };
 
   // DTW pairing runs on the per-pull power curves: it is what lets a finding be
@@ -120,8 +164,8 @@ export function analyse(
   );
 
   const findings: Finding[] = [
-    ...runDetectors(before, segBefore, 'before', curvesBefore, rpmAxis),
-    ...runDetectors(after, segAfter, 'after', curvesAfter, rpmAxis),
+    ...runDetectors(before, segBefore, 'before', curvesBefore, rpmAxis, vehicle.fuel),
+    ...runDetectors(after, segAfter, 'after', curvesAfter, rpmAxis, vehicle.fuel),
   ];
 
   const recommendations = recommend(findings);
@@ -129,12 +173,34 @@ export function analyse(
   // The validity card scores the *merged* findings, not the raw ones: knock from
   // 4000 to 5500 rpm is one problem, and subtracting its penalty once per zone
   // would fail a tune on arithmetic rather than on evidence.
-  const cvAfter = coefficientOfVariation(mc.peakPerPullAfter);
+  // One pull has no scatter to measure; the assumed figure stands in, so a single
+  // pull is neither rewarded with perfect consistency nor punished with none.
+  const cvAfter = nAfter >= 2 ? coefficientOfVariation(mc.peakPerPullAfter) : PRIOR_PULL_CV;
   const validity = buildValidityCard(
     gain,
     cvAfter,
     recommendations.map((recommendation) => recommendation.finding),
   );
+
+  // --- what the tuner can act on ----------------------------------------------
+  // Requested vs delivered for both sessions; margins and corrections for the
+  // after session only, because the question they answer is what to change in the
+  // tune as it now stands.
+  const tracking = [
+    ...trackSession(segBefore.pulls, rpmAxis, 'before', rng),
+    ...trackSession(segAfter.pulls, rpmAxis, 'after', rng),
+  ];
+  const mergedAfter = recommendations
+    .map((recommendation) => recommendation.finding)
+    .filter((finding) => finding.evidence.session === 'after');
+  const corrections = buildCorrections(
+    segAfter.pulls,
+    rpmAxis,
+    mergedAfter,
+    tracking.filter((series) => series.session === 'after'),
+    after.sourceSampleRateHz,
+  );
+  const margins = computeMargins(segAfter.pulls, rpmAxis, rng, vehicle.fuel);
 
   const violations = [
     ...checkSession({
@@ -142,15 +208,30 @@ export function analyse(
       pulls: segBefore.pulls,
       rejectedCount: segBefore.rejected.length,
       which: 'before',
+      rpmRange: range,
     }),
     ...checkSession({
       session: after,
       pulls: segAfter.pulls,
       rejectedCount: segAfter.rejected.length,
       which: 'after',
+      rpmRange: range,
     }),
     ...checkPair(segBefore.pulls, segAfter.pulls),
+    ...checkFuel(segAfter.pulls, vehicle.fuel),
   ];
+
+  const ecu = compareEcuTorque(before, after, mc.curve);
+  const cvBefore = nBefore >= 2 ? coefficientOfVariation(mc.peakPerPullBefore) : PRIOR_PULL_CV;
+  const health = assessHealth({
+    sessions: { before, after },
+    pulls: { before: segBefore.pulls, after: segAfter.pulls },
+    cv: { before: cvBefore, after: cvAfter },
+    tracking,
+    findings: recommendations.map((recommendation) => recommendation.finding),
+    ecu,
+    fuel: vehicle.fuel,
+  });
 
   return {
     before: summarise(before, segBefore, mc.peakBefore, mc.peakPerPullBefore),
@@ -159,6 +240,12 @@ export function analyse(
     curve: mc.curve,
     findings,
     recommendations,
+    tracking,
+    ecu,
+    health,
+    corrections,
+    margins,
+    loggingAdvice: loggingAdvice(before, after, vehicle.fuel),
     validity,
     budget: mc.budget,
     violations,
@@ -166,6 +253,84 @@ export function analyse(
     seed,
     computedAt: new Date().toISOString(),
     pairings,
+  };
+}
+
+/**
+ * Keep only the gear both sessions share, choosing the one they cover best
+ * together; pulls in other gears move to `rejected` with a reason. When the
+ * sessions share no gear, nothing is dropped and the protocol check reports the
+ * mismatch instead.
+ */
+function selectCommonGear(
+  before: SegmentationResult,
+  after: SegmentationResult,
+): [SegmentationResult, SegmentationResult] {
+  const coverage = (result: SegmentationResult, gear: number): number =>
+    result.pulls
+      .filter((p) => p.pull.gear === gear)
+      .reduce((sum, p) => sum + Math.max(0, p.pull.rpmEnd - p.pull.rpmStart), 0);
+  const gearsBefore = new Set(before.pulls.map((p) => p.pull.gear));
+  const gearsAfter = new Set(after.pulls.map((p) => p.pull.gear));
+  if (gearsBefore.size <= 1 && gearsAfter.size <= 1) return [before, after];
+
+  const shared = [...gearsBefore].filter((g) => gearsAfter.has(g));
+  if (shared.length === 0) return [before, after];
+
+  let best = shared[0] as number;
+  for (const gear of shared) {
+    if (Math.min(coverage(before, gear), coverage(after, gear)) > Math.min(coverage(before, best), coverage(after, best))) {
+      best = gear;
+    }
+  }
+
+  const keep = (result: SegmentationResult): SegmentationResult => ({
+    ...result,
+    pulls: result.pulls.filter((p) => p.pull.gear === best),
+    rejected: [
+      ...result.rejected,
+      ...result.pulls
+        .filter((p) => p.pull.gear !== best)
+        .map((p) => ({ ...p.pull, rejected: 'segment.rejected.otherGear' })),
+    ],
+  });
+  return [keep(before), keep(after)];
+}
+
+/**
+ * Add the assumed pull-to-pull scatter (PRIOR_PULL_CV) to every figure that
+ * compares or reports a session, when there were too few pulls to measure it.
+ * Without this, one pull against one pull would carry only the parameter
+ * uncertainty — which cancels in a comparison — and a 2 hp difference would look
+ * proven.
+ */
+function withAssumedScatter(mc: MonteCarloOutput, nBefore: number, nAfter: number): MonteCarloOutput {
+  const both = Math.sqrt(1 / nBefore + 1 / nAfter);
+  const peakMean = mean([mc.peakBefore.value, mc.peakAfter.value]);
+  const torqueMean = mean([mc.peakTorqueBefore.value, mc.peakTorqueAfter.value]);
+
+  const curve = mc.curve.map((point) => {
+    const level = mean([point.before.value, point.after.value]);
+    return {
+      ...point,
+      before: widenEstimate(point.before, (PRIOR_PULL_CV * point.before.value) / Math.sqrt(nBefore)),
+      after: widenEstimate(point.after, (PRIOR_PULL_CV * point.after.value) / Math.sqrt(nAfter)),
+      delta: widenEstimate(point.delta, PRIOR_PULL_CV * level * both),
+    };
+  });
+  const bandLevel = mean(curve.map((p) => mean([p.before.value, p.after.value])));
+
+  return {
+    ...mc,
+    peakBefore: widenEstimate(mc.peakBefore, (PRIOR_PULL_CV * mc.peakBefore.value) / Math.sqrt(nBefore)),
+    peakAfter: widenEstimate(mc.peakAfter, (PRIOR_PULL_CV * mc.peakAfter.value) / Math.sqrt(nAfter)),
+    delta: widenEstimate(mc.delta, PRIOR_PULL_CV * peakMean * both),
+    deltaPercent: widenEstimate(mc.deltaPercent, PRIOR_PULL_CV * 100 * both),
+    averageDelta: widenEstimate(mc.averageDelta, PRIOR_PULL_CV * bandLevel * both),
+    peakTorqueBefore: widenEstimate(mc.peakTorqueBefore, (PRIOR_PULL_CV * mc.peakTorqueBefore.value) / Math.sqrt(nBefore)),
+    peakTorqueAfter: widenEstimate(mc.peakTorqueAfter, (PRIOR_PULL_CV * mc.peakTorqueAfter.value) / Math.sqrt(nAfter)),
+    torqueDelta: widenEstimate(mc.torqueDelta, PRIOR_PULL_CV * torqueMean * both),
+    curve,
   };
 }
 
@@ -201,6 +366,7 @@ function runDetectors(
   which: 'before' | 'after',
   curves: readonly Float64Array[],
   rpmAxis: Float64Array,
+  fuel: VehicleParameters['fuel'],
 ): Finding[] {
   const provenanceOf: ChannelProvenanceLookup = (channel) =>
     session.channels.has(channel) ? (session.provenance.get(channel) ?? 'measured') : 'missing';
@@ -213,6 +379,7 @@ function runDetectors(
     sourceSampleRateHz: session.sourceSampleRateHz,
     correctionInBand: result.pulls.every((p) => p.pull.correction.inValidBand),
     iatRiseC: intakeTemperatureRise(result),
+    fuel,
   };
 
   const findings = [...detectThresholds(ctx), ...detectResidualOutliers(ctx, curves)];

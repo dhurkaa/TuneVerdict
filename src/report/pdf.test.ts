@@ -12,10 +12,7 @@ describe('text measurement', () => {
   });
 
   it('scales with font size', () => {
-    expect(widthOf('TuneVerdict', 'Helvetica', 20)).toBeCloseTo(
-      widthOf('TuneVerdict', 'Helvetica', 10) * 2,
-      6,
-    );
+    expect(widthOf('TuneVerdict', 'Helvetica', 20)).toBeCloseTo(widthOf('TuneVerdict', 'Helvetica', 10) * 2, 6);
   });
 
   it('never wraps a line wider than the column', () => {
@@ -77,6 +74,66 @@ describe('document structure', () => {
     const match = /<< \/Length (\d+) >>\nstream\n([\s\S]*?)\nendstream/.exec(pdf);
     expect(match).not.toBeNull();
     expect((match?.[2] as string).length).toBe(Number(match?.[1]));
+  });
+});
+
+describe('charts', () => {
+  it('draws a two-axis chart and keeps the file valid', async () => {
+    const doc = new PdfDocument();
+    doc.heading('Torque and power');
+    doc.chart({
+      height: 200,
+      xMin: 2000,
+      xMax: 5500,
+      xTicks: [2000, 3000, 4000, 5000],
+      xLabel: 'rpm',
+      intervals: 6,
+      leftMin: 0,
+      leftMax: 480,
+      leftStep: 80,
+      leftLabel: 'Nm',
+      leftColour: { r: 0.2, g: 0.4, b: 0.7 },
+      rightMin: 0,
+      rightMax: 360,
+      rightStep: 60,
+      rightLabel: 'PS',
+      rightColour: { r: 0.04, g: 0.42, b: 0.34 },
+      series: [
+        {
+          axis: 'left',
+          colour: { r: 0.2, g: 0.4, b: 0.7 },
+          dashed: true,
+          width: 1,
+          points: [
+            { x: 2000, y: 350 },
+            { x: 5500, y: 280 },
+          ],
+        },
+        {
+          axis: 'right',
+          colour: { r: 0.04, g: 0.42, b: 0.34 },
+          dashed: false,
+          width: 1.6,
+          points: [
+            { x: 2000, y: 100 },
+            { x: 5500, y: 300 },
+          ],
+          band: [
+            { x: 2000, lo: 95, hi: 105 },
+            { x: 5500, lo: 290, hi: 310 },
+          ],
+        },
+      ],
+    });
+    doc.text('after the chart');
+    const pdf = await textOf(doc.toBlob());
+
+    expect(pdf).toContain('[4 3] 0 d'); // the dashed "before" line
+    expect(pdf).toContain('(Nm) Tj');
+    expect(pdf).toContain('(PS) Tj');
+    expect(pdf).toContain(' h f'); // the filled interval band
+    const startxref = Number(/startxref\n(\d+)/.exec(pdf)?.[1]);
+    expect(pdf.slice(startxref, startxref + 4)).toBe('xref');
   });
 });
 
